@@ -45,6 +45,11 @@ a.version = process.argv[2];
 fs.writeFileSync(f, JSON.stringify(a, null, 4) + "\n");
 ' "$DIST/appinfo.json" "$VERSION"
 
+# This version's CHANGELOG section for What's new, with the same section
+# from each translated changelog
+node "$HERE/gen-whatsnew.js" "$ROOT/CHANGELOG.md" "$VERSION" "$DIST/whatsnew.js" \
+    es="$ROOT/docs/changelog.es.md" ru="$ROOT/docs/changelog.ru.md"
+
 if [ "${1:-}" = --no-package ]; then echo "Assembled $DIST (v$VERSION)"; exit 0; fi
 
 ares-package --no-minify "$DIST" -o "$OUT" >/dev/null

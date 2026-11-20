@@ -2,6 +2,16 @@
 
 All notable changes to WEBOS-FW-BLOCK.  Versions follow [semantic versioning](https://semver.org/).
 
+## [0.1.2] - 2026-11-20
+
+### Added
+
+- **What's new in your language.**  After an update, and when the app offers one, the release notes show in Spanish or Russian when the app is set to one of them.  The translated notes come signed with the release, and are checked the same way before they're shown.
+
+### Fixed
+
+- **No more "couldn't reach GitHub" when the app first opens.**  The first check could lose GitHub's answer, or run before the TV's network was up.  The app now holds on to every request until it's answered, and quietly tries a check that couldn't reach GitHub again a few times before saying so.
+
 ## [0.1.1] - 2026-11-20
 
 ### Added

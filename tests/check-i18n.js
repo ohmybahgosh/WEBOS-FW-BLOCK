@@ -68,5 +68,22 @@ Object.keys(I.scripts).forEach(function (lang) {
     });
 });
 console.log(msgs.length + ' script messages');
+
+// Each translated changelog has this version's section, with the same ###
+// headings, the same number of items under each, and a bold summary on each
+var root = path.join(__dirname, '..');
+var gw = require(path.join(root, 'webos-app', 'gen-whatsnew.js'));
+var ver = (/^VERSION="(.*)"$/m.exec(sh) || [])[1];
+var enMd = gw.section(path.join(root, 'CHANGELOG.md'), ver);
+['es', 'ru'].forEach(function (lang) {
+    var f = path.join(root, 'docs', 'changelog.' + lang + '.md');
+    var md = gw.section(f, ver);
+    if (!md) { console.log('docs/changelog.' + lang + '.md has no section for ' + ver); bad++; return; }
+    if (gw.shape(md) !== gw.shape(enMd)) { console.log('changelog ' + lang + ' ' + ver + ' is shaped ' + gw.shape(md) + ', English is ' + gw.shape(enMd)); bad++; }
+    md.split('\n').forEach(function (l) {
+        if (/^- /.test(l) && !/^- \*\*[^*]+\*\*/.test(l)) { console.log('changelog ' + lang + ' item without a bold summary: ' + l.slice(0, 60)); bad++; }
+    });
+});
+console.log('changelogs: ' + ver + ' in es and ru');
 if (bad) { console.log(bad + ' problems'); process.exit(1); }
 console.log('All translated.');

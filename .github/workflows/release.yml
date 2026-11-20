@@ -42,8 +42,11 @@ jobs:
           npm install -g @webos-tools/cli@3.2.6
           sh webos-app/build.sh
           cp webos-app/out/*.ipk webos-app/out/*.manifest.json .
+          # The translated changelogs, so the app can show what's new in its
+          # language (signed below, and checked by the app like the manifest)
+          cp docs/changelog.es.md docs/changelog.ru.md .
       - name: Build checksums
-        run: sha256sum fw-block.sh *.ipk *.manifest.json > SHA256SUMS
+        run: sha256sum fw-block.sh *.ipk *.manifest.json changelog.*.md > SHA256SUMS
       # The app only installs an update whose manifest this key signed.  The
       # private key is the RELEASE_SIGNING_KEY secret and never touches disk.
       - name: Sign the release
@@ -51,7 +54,7 @@ jobs:
           RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
         run: |
           [ -n "$RELEASE_SIGNING_KEY" ] || { echo "::error::No RELEASE_SIGNING_KEY secret: releases must be signed."; exit 1; }
-          node scripts/release-sign.js *.manifest.json *.ipk fw-block.sh SHA256SUMS
+          node scripts/release-sign.js *.manifest.json *.ipk fw-block.sh changelog.*.md SHA256SUMS
           [ "$(node scripts/release-sign.js --public-key)" = "$(sed -n "s/^var RELEASE_PUBKEY = '\(.*\)';$/\1/p" update.js)" ] || { echo "::error::The signing key isn't the one update.js trusts."; exit 1; }
       - name: Publish the release
         env:
@@ -61,6 +64,6 @@ jobs:
             $0 ~ "^## \\[?" v { on = 1; next }
             on && /^## / { exit }
             on { print }' CHANGELOG.md)
-          gh release create "$GITHUB_REF_NAME" fw-block.sh *.ipk *.manifest.json SHA256SUMS *.minisig \
+          gh release create "$GITHUB_REF_NAME" fw-block.sh *.ipk *.manifest.json changelog.*.md SHA256SUMS *.minisig \
             --title "WEBOS-FW-BLOCK $GITHUB_REF_NAME" \
             --notes "${notes:-See CHANGELOG.md}"

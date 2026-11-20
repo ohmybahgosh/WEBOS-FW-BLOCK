@@ -121,7 +121,7 @@ window.FB_DEMO = function (args, cb) {
         else if (a === 'events') { cb(true, tv.events, ''); }
         else if (a === 'report') { cb(true, tv.report, ''); }
         else if (a === 'on' || a === 'off') { cb(true, tv[a] || '', ''); }
-        else if (a === 'update-check') { cb(true, '{"current":"0.1.1","latest":"0.1.1","newer":false,"ipkUrl":"","sha256":"","notes":"","published":""}', ''); }
+        else if (a.indexOf('update-check') === 0) { cb(true, '{"current":"0.1.1","latest":"0.1.1","newer":false,"ipkUrl":"","sha256":"","notes":"","published":""}', ''); }
         else if (a === 'backups') { cb(true, '[{"name":"20261119-181302","time":1795129982,"reason":"on","version":"0.1.0","check":"true","auto":"on","block":false},{"name":"20261118-090511","time":1795019111,"reason":"manual","version":"0.1.0","check":"false","auto":"off","block":true}]', ''); }
         else { cb(false, '', 'unknown'); }
     }, 60);

@@ -227,3 +227,12 @@ footer { bottom: 44px; left: 100px; right: 100px; font-size: 26px; }
 .panel.tall .layers small { font-size: 21px; }
 /* Long help pages: a little smaller, so they still fit */
 .panel.long .panel-body { font-size: 30px; }
+
+/* Release notes */
+.notes { max-height: 600px; overflow: hidden; }
+.notes h4 { font-family: "DejaVu Sans Mono", monospace; font-size: 28px; color: #ff2d55; margin: 10px 0 6px; }
+.notes ul { margin: 0 0 8px; padding-left: 30px; }
+.notes li { margin-bottom: 8px; }
+.notes li.sub { margin-left: 30px; list-style: circle; }
+.notes code { font-size: .9em; color: #3ef08f; }
+.notes p.note { color: #febc2e; }

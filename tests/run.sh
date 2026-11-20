@@ -837,6 +837,19 @@ test_update() {
     run update-check
     check "newer found" has '"newer":true'
     check "its notes" has 'Something new'
+    run update-check es
+    check "notes in Spanish too, signed" has '"notesLang":"### Added'
+    check "this version's section only" lacks 'Viejo'
+    release_stop
+    export FAKE_CL_SIG=tampered
+    release_start 9.9.9
+    run update-check es
+    check "a changed translation isn't shown" lacks 'notesLang'
+    check "the update itself still offered" has '"newer":true'
+    release_stop
+    unset FAKE_CL_SIG
+    release_start 9.9.9
+    run update-check
     run update-install
     check "started" has '"state":"starting"'
     check "installed" upd_wait "done"

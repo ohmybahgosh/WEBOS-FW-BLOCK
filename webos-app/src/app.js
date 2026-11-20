@@ -40,15 +40,21 @@
             cb({ returnValue: false, errorText: 'Not running on a webOS TV' });
             return;
         }
+        // Kept referenced until it answers: webOS can otherwise throw away a
+        // bridge (and its answer) during a slow call
         var bridge = new window.PalmServiceBridge();
+        live.push(bridge);
         bridge.onservicecallback = function (msg) {
             var reply;
             try { reply = JSON.parse(msg); } catch (e) { reply = { returnValue: false, errorText: 'Unreadable reply' }; }
+            var i = live.indexOf(bridge);
+            if (i >= 0) { live.splice(i, 1); }
             bridge = null;
             cb(reply);
         };
         bridge.call(uri, JSON.stringify(params));
     }
+    var live = [];
 
     // Run the bundled script as root. cb(ok, stdout, stderr)
     function runScript(args, cb) {
@@ -430,9 +436,20 @@
     // ------------------------------------------------------------------ updates
 
     var upd = null;
-    function checkUpdate(cb) {
-        runScript('update-check', function (ok, out) {
-            upd = parse(out) || { error: 'no-answer' };
+    // A network that isn't up yet (the TV just turned on) or a slow first
+    // answer: tried again quietly, a few times, before any error is shown
+    var RETRY_AFTER = [4000, 10000, 25000];
+    function networkish(e) { return !e || e === 'no-answer' || /^(http-5|E[A-Z]|network|socket)/.test(e); }
+    function checkUpdate(cb, attempt) {
+        attempt = attempt || 0;
+        var lang = (window.FB_I18N && window.FB_I18N.lang) || 'en';
+        runScript('update-check' + (lang === 'en' ? '' : ' ' + lang), function (ok, out) {
+            var r = parse(out) || { error: 'no-answer' };
+            if (r.error && networkish(r.error) && attempt < RETRY_AFTER.length) {
+                setTimeout(function () { checkUpdate(cb, attempt + 1); }, RETRY_AFTER[attempt]);
+                return;
+            }
+            upd = r;
             updateHint();
             if (cb) { cb(); }
         });
@@ -456,8 +473,29 @@
             'no-answer': T('no answer from GitHub')
         }[e] || (/^(http-|E[A-Z]|network|too-big|insecure)/.test(e || '') ? T('no answer from GitHub') + ' (' + e + ')' : (e || '?'));
     }
-    function notesHtml(text) {
-        return '<p class="dim">' + esc(T('What\'s new, from the release notes (in English):')) + '</p><div class="notes">' + esc(text.replace(/\*\*/g, '').replace(/^#+ /gm, '')) + '</div>';
+    // Changelog markdown, lightly: ### headings (translated), - items with a
+    // **bold** summary, `code`, [links](...) as plain text, > notes
+    function mdHtml(md) {
+        var heads = { Added: T('Added'), Changed: T('Changed'), Fixed: T('Fixed'), Removed: T('Removed'), Security: T('Security') };
+        function inline(t) {
+            return esc(t).replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
+        }
+        var html = '', list = false;
+        String(md || '').replace(/\r/g, '').split('\n').forEach(function (line) {
+            var h = /^###\s+(.+)/.exec(line), it = /^- (.+)/.exec(line), sub = /^\s+- (.+)/.exec(line);
+            if (!h && !it && !sub && list && !/^\s+\S/.test(line)) { html += '</ul>'; list = false; }
+            if (h) { html += '<h4>' + esc(heads[h[1].trim()] || h[1].trim()) + '</h4>'; }
+            else if (it) { if (!list) { html += '<ul>'; list = true; } html += '<li>' + inline(it[1]) + '</li>'; }
+            else if (sub) { html += '<li class="sub">' + inline(sub[1]) + '</li>'; }
+            else if (/^>\s?/.test(line)) { html += '<p class="note">' + inline(line.replace(/^>\s?/, '')) + '</p>'; }
+            else if (/\S/.test(line)) { html += '<p>' + inline(line) + '</p>'; }
+        });
+        if (list) { html += '</ul>'; }
+        return html;
+    }
+    // TRANSLATED: the notes are in the app's language; otherwise they're labeled English
+    function notesHtml(text, translated) {
+        return (translated ? '' : '<p class="dim">' + esc(T('What\'s new, from the release notes (in English):')) + '</p>') + '<div class="notes">' + mdHtml(text) + '</div>';
     }
     function showUpdate() {
         if (!upd || upd.error) {
@@ -469,7 +507,7 @@
             return;
         }
         confirm(T('Update to v{v}?', { v: upd.latest }),
-            (upd.notes ? notesHtml(upd.notes) : '') +
+            (upd.notesLang ? notesHtml(upd.notesLang, true) : (upd.notes ? notesHtml(upd.notes) : '')) +
             p(esc(T('The Homebrew Channel downloads and installs it, after checking it\'s the signed release.  The app closes and opens again.  The block stays on the whole time.'))),
             function () {
                 busy = true;
@@ -496,9 +534,17 @@
     function launchParams() {
         try { return JSON.parse((window.PalmSystem && window.PalmSystem.launchParams) || '{}') || {}; } catch (e) { return {}; }
     }
+    // What's new in this version, in the app's language when it's translated
+    // (whatsnew.js, made at build time from the changelogs)
     function showUpdated(v) {
+        var wn = window.FB_WHATSNEW, lang = (window.FB_I18N && window.FB_I18N.lang) || 'en';
+        if (wn && wn.version === v) {
+            var t = (lang !== 'en' && wn.i18n && wn.i18n[lang]) || '';
+            message(T('Updated to v{v}', { v: v }), notesHtml(t || wn.md, lang === 'en' || !!t));
+            return;
+        }
         runScript('changes ' + shq(v), function (ok, out) {
-            message(T('Updated to v{v}', { v: v }), out ? notesHtml(out) : '');
+            message(T('Updated to v{v}', { v: v }), out ? notesHtml(out, lang === 'en') : '');
         });
     }
 

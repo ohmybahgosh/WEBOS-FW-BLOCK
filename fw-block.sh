@@ -68,7 +68,7 @@
 #                     a backup of what FW Block and webOS's update settings
 #                     were (made by itself before every change), the list,
 #                     and putting one back
-#   update-check | update-install | update-status | changes [VERSION]
+#   update-check [LANG] | update-install | update-status | changes [VERSION]
 #                     a newer FW Block from GitHub, checked against the
 #                     release key before the Homebrew Channel installs it
 #   boot | watch      used by the startup hook and the background check
@@ -76,7 +76,7 @@
 #
 # Paths can be moved under FB_ROOT for the tests.
 
-VERSION="0.1.1"
+VERSION="0.1.2"
 R="${FB_ROOT:-}"
 HERE=$(cd "$(dirname "$0")" && pwd)
 SELF="$HERE/fw-block.sh"
@@ -1280,7 +1280,9 @@ update_check() {
     [ -n "$_n" ] || die '{"error":"no-node"}'
     secure_run
     mkdir -p "$UPD"
-    "$_n" "$HERE/update.js" check "$VERSION" > "$UPD/check.json.tmp" 2>/dev/null
+    # The app's language, for the new version's notes in it
+    case "${1:-}" in es|ru) _ul=$1 ;; *) _ul='' ;; esac
+    "$_n" "$HERE/update.js" check "$VERSION" "$_ul" > "$UPD/check.json.tmp" 2>/dev/null
     if grep -q '"latest"' "$UPD/check.json.tmp" 2>/dev/null; then
         mv "$UPD/check.json.tmp" "$UPD/check.json"
         cat "$UPD/check.json"
@@ -1404,7 +1406,7 @@ case "${1:-status}" in
     backup) backup_make manual ;;
     backups) backups_list "${2:-}" ;;
     restore) cmd_restore "${2:-}" ;;
-    update-check) update_check ;;
+    update-check) update_check "${2:-}" ;;
     update-install) update_install ;;
     update-run) update_run ;;
     update-status) update_status ;;

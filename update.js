@@ -6,6 +6,8 @@
  *   node update.js check CURRENT_VERSION
  *
  * Prints {"current","latest","newer","ipkUrl","sha256","notes","published"}
+ * and, given a language (es, ru), "notesLang": that version's notes from the
+ * release's translated changelog, only if it's signed with the same keys
  * or {"error":...}.  The manifest has to be signed by the project's release
  * key (below, and in SECURITY.md), whose private half is kept out of the
  * repository and only used by the release workflow, so a release put up by
@@ -38,8 +40,21 @@ var VERSION_RE = /^[0-9]{1,4}(\.[0-9]{1,6}){1,3}$/;
 
 function out(o) { process.stdout.write(JSON.stringify(o) + '\n'); }
 
+// GET, tried again a couple of times on a network error: just after the TV
+// turns on, the network or DNS may not be up yet
+function get(u, hops, cb, tries) {
+    tries = tries === undefined ? 2 : tries;
+    getOnce(u, hops, function (e, b) {
+        if (e && tries > 0 && /^(E[A-Z]|network)/.test(e)) {
+            setTimeout(function () { get(u, hops, cb, tries - 1); }, 2000);
+            return;
+        }
+        cb(e, b);
+    });
+}
+
 // GET with redirects (GitHub's download links redirect to its file store)
-function get(u, hops, cb) {
+function getOnce(u, hops, cb) {
     var called = false;
     function done(e, b) { if (!called) { called = true; cb(e, b); } }
     var p = url.parse(u);
@@ -137,7 +152,35 @@ function checked(current, body) {
             var r = JSON.parse(b2);
             if (!e2 && r && r.tag_name === 'v' + m.version) { res.notes = String(r.body || ''); res.published = String(r.published_at || ''); }
         } catch (x) { /* notes are optional */ }
-        out(res);
+        translatedNotes(m.version, LANG, function (t) {
+            if (t) { res.notesLang = t; res.notesLangCode = LANG; }
+            out(res);
+        });
+    });
+}
+
+// The new version's section of its translated changelog (changelog.es.md and
+// so on, attached to the release and signed like everything else).  Shown
+// before installing, so it's only used if its signature checks out.
+var LANGS = ['es', 'ru'];
+var LANG = LANGS.indexOf(process.argv[4]) >= 0 ? process.argv[4] : '';
+function section(text, version) {
+    var out = [], on = false;
+    String(text).replace(/\r/g, '').split('\n').forEach(function (line) {
+        if (/^## /.test(line)) { on = line.indexOf('## [' + version + ']') === 0; return; }
+        if (on) { out.push(line); }
+    });
+    return out.join('\n').replace(/^\s+|\s+$/g, '');
+}
+function translatedNotes(version, lang, cb) {
+    if (!lang) { cb(''); return; }
+    var name = 'changelog.' + lang + '.md', base = RELEASE_BASE + '/download/v' + version + '/' + name;
+    get(base, 5, function (e, body) {
+        if (e) { cb(''); return; }
+        get(base + '.minisig', 5, function (es, sig) {
+            var ok = !es && PUBKEYS.some(function (k) { return verify(Buffer.from(body, 'utf8'), sig, k, name); });
+            cb(ok ? section(body, version) : '');
+        });
     });
 }
 
@@ -145,4 +188,4 @@ if (require.main === module) {
     if (process.argv[2] !== 'check') { out({ error: 'bad-command' }); process.exit(2); }
     check(process.argv[3] || '0');
 }
-module.exports = { verify: verify, PUBKEYS: PUBKEYS, RELEASE_PUBKEY: RELEASE_PUBKEY, RELEASE_PUBKEY_BACKUP: RELEASE_PUBKEY_BACKUP };
+module.exports = { section: section, verify: verify, PUBKEYS: PUBKEYS, RELEASE_PUBKEY: RELEASE_PUBKEY, RELEASE_PUBKEY_BACKUP: RELEASE_PUBKEY_BACKUP };

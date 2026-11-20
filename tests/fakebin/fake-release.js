@@ -26,9 +26,9 @@ function keyPair() {
 }
 var KEY = keyPair(), OTHER = keyPair();
 
-function minisig(k, data) {
+function minisig(k, data, name) {
     var sig = crypto.sign(null, data, k.priv);
-    var trusted = 'timestamp:1794500000\tfile:' + NAME;
+    var trusted = 'timestamp:1794500000\tfile:' + (name || NAME);
     var global = crypto.sign(null, Buffer.concat([sig, Buffer.from(trusted)]), k.priv);
     return 'untrusted comment: test\n' + Buffer.concat([Buffer.from('Ed'), k.id, sig]).toString('base64') + '\n'
         + 'trusted comment: ' + trusted + '\n' + global.toString('base64') + '\n';
@@ -49,6 +49,14 @@ var s = http.createServer(function (req, res) {
     if (req.url === '/rel/latest/download/' + NAME + '.minisig' && how !== 'none') {
         res.end(minisig(how === 'other-key' ? OTHER : KEY, Buffer.from(manifest)));
         return;
+    }
+    // The translated changelog; FAKE_CL_SIG=tampered changes it after signing
+    var cl = '## [' + V + '] - 2026-11-20\n\n### Added\n\n- **Algo nuevo.**\n\n## [0.0.1]\n\n- **Viejo.**\n';
+    if (req.url === '/rel/download/v' + V + '/changelog.es.md') {
+        res.end(process.env.FAKE_CL_SIG === 'tampered' ? cl.replace('nuevo', 'malo') : cl); return;
+    }
+    if (req.url === '/rel/download/v' + V + '/changelog.es.md.minisig') {
+        res.end(minisig(KEY, Buffer.from(cl), 'changelog.es.md')); return;
     }
     if (req.url === '/api/releases/latest') {
         res.end(JSON.stringify({ tag_name: 'v' + V, published_at: '2026-11-12T12:00:00Z', body: '### Added\n\n- **Something new.**' }));
