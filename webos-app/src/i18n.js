@@ -17,6 +17,16 @@
     var NAMES = { en: 'English', ru: 'Русский', es: 'Español' };
 
     var es = {
+        'this TV has no Node.js to check with': 'este televisor no tiene Node.js para comprobarlo',
+        'the release isn\'t signed with the project\'s key, so it wasn\'t trusted': 'la versión no está firmada con la clave del proyecto, así que no se aceptó',
+        'the release points somewhere it shouldn\'t, so it wasn\'t trusted': 'la versión apunta a un sitio que no debe, así que no se aceptó',
+        'the release\'s details couldn\'t be read': 'no se pudieron leer los datos de la versión',
+        'there\'s nothing newer': 'no hay nada más nuevo',
+        'the last check didn\'t look right, so check again': 'la última comprobación no salió bien, así que vuelve a comprobar',
+        'no answer from GitHub': 'GitHub no respondió',
+        'What\'s new, from the release notes (in English):': 'Novedades, de las notas de la versión (en inglés):',
+        'Couldn\'t check GitHub for a newer FW Block: {e}.  Check the TV is online and try again.': 'No se pudo buscar en GitHub un FW Block más nuevo: {e}.  Comprueba que el televisor tiene internet y vuelve a intentarlo.',
+        'The report stays in English, so anyone can read it on GitHub.': 'El informe va en inglés, para que cualquiera pueda leerlo en GitHub.',
         'before turning on': 'antes de activar',
         'before restoring': 'antes de restaurar',
         'before an update': 'antes de una actualización',
@@ -28,7 +38,6 @@
         'v{v}, the latest': 'v{v}, la última',
         'Up to date': 'Al día',
         'Updates': 'Actualizaciones',
-        'Couldn\'t reach GitHub to check for a newer FW Block ({e}).  Check the TV is online and try again.': 'No se pudo llegar a GitHub para buscar un FW Block más nuevo ({e}).  Comprueba que el televisor tiene internet y vuelve a intentarlo.',
         'FW Block v{v} is the latest.': 'FW Block v{v} es la última versión.',
         'Releases are signed, and the app checks the signature before it installs one.': 'Las versiones van firmadas, y la app comprueba la firma antes de instalar una.',
         'Update to v{v}?': '¿Actualizar a la v{v}?',
@@ -252,6 +261,16 @@
     };
 
     var ru = {
+        'this TV has no Node.js to check with': 'на этом телевизоре нет Node.js для проверки',
+        'the release isn\'t signed with the project\'s key, so it wasn\'t trusted': 'версия не подписана ключом проекта, поэтому ей не доверились',
+        'the release points somewhere it shouldn\'t, so it wasn\'t trusted': 'версия указывает не туда, куда следует, поэтому ей не доверились',
+        'the release\'s details couldn\'t be read': 'не удалось прочитать данные версии',
+        'there\'s nothing newer': 'более новой версии нет',
+        'the last check didn\'t look right, so check again': 'последняя проверка выглядела неверно, проверьте ещё раз',
+        'no answer from GitHub': 'GitHub не ответил',
+        'What\'s new, from the release notes (in English):': 'Что нового, из заметок к версии (на английском):',
+        'Couldn\'t check GitHub for a newer FW Block: {e}.  Check the TV is online and try again.': 'Не удалось проверить на GitHub новую версию FW Block: {e}.  Проверьте, что телевизор в сети, и попробуйте ещё раз.',
+        'The report stays in English, so anyone can read it on GitHub.': 'Отчёт остаётся на английском, чтобы его мог прочитать любой на GitHub.',
         'before turning on': 'перед включением',
         'before restoring': 'перед восстановлением',
         'before an update': 'перед обновлением',
@@ -263,7 +282,6 @@
         'v{v}, the latest': 'v{v}, последняя',
         'Up to date': 'Актуально',
         'Updates': 'Обновления',
-        'Couldn\'t reach GitHub to check for a newer FW Block ({e}).  Check the TV is online and try again.': 'Не удалось связаться с GitHub, чтобы проверить новую версию FW Block ({e}).  Проверьте, что телевизор в сети, и попробуйте ещё раз.',
         'FW Block v{v} is the latest.': 'FW Block v{v} — последняя версия.',
         'Releases are signed, and the app checks the signature before it installs one.': 'Версии подписаны, и приложение проверяет подпись перед установкой.',
         'Update to v{v}?': 'Обновить до v{v}?',
@@ -488,6 +506,7 @@
 
     // The script's messages, line by line
     var esScript = [
+        [/^No backups yet\.  FW Block makes one by itself before it turns the block on\.$/, 'Aún no hay copias.  FW Block hace una por sí solo antes de activar el bloqueo.'],
         [/^Saved a backup: (.*)$/, 'Copia de seguridad guardada: $1'],
         [/^Restored the backup from (.*)\.$/, 'Restaurada la copia del $1.'],
         [/^webOS's update check: (true|false), as in the backup\.$/, 'Búsqueda de actualizaciones de webOS: $1, como en la copia.'],
@@ -534,6 +553,7 @@
         [/^FW Block is off\.$/, 'FW Block está desactivado.']
     ];
     var ruScript = [
+        [/^No backups yet\.  FW Block makes one by itself before it turns the block on\.$/, 'Копий пока нет.  FW Block сам сделает копию перед включением блокировки.'],
         [/^Saved a backup: (.*)$/, 'Сохранена резервная копия: $1'],
         [/^Restored the backup from (.*)\.$/, 'Восстановлена копия от $1.'],
         [/^webOS's update check: (true|false), as in the backup\.$/, 'Проверка обновлений webOS: $1, как в копии.'],

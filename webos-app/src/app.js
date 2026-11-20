@@ -417,15 +417,30 @@
         });
     }
     function updateHint() {
-        var v = (state && state.version) || '';
+        var v = (state && state.version) || (upd && upd.current) || '';
         if (!upd) { hint('update', T('v{v}, checking for a newer one…', { v: v })); return; }
-        if (upd.error) { hint('update', T('v{v}.  Couldn\'t check for a newer one: {e}', { v: v, e: upd.error })); return; }
+        if (upd.error) { hint('update', T('v{v}.  Couldn\'t check for a newer one: {e}', { v: v, e: updErr(upd.error) })); return; }
         if (upd.newer) { hint('update', T('v{v} is out, with what\'s new', { v: upd.latest }), T('Update'), 'amber'); return; }
         hint('update', T('v{v}, the latest', { v: v }), T('Up to date'), 'green');
     }
+    // An update error code in plain words
+    function updErr(e) {
+        return {
+            'no-node': T('this TV has no Node.js to check with'),
+            'bad-signature': T('the release isn\'t signed with the project\'s key, so it wasn\'t trusted'),
+            'unexpected-url': T('the release points somewhere it shouldn\'t, so it wasn\'t trusted'),
+            'bad-manifest': T('the release\'s details couldn\'t be read'),
+            'nothing-newer': T('there\'s nothing newer'),
+            'bad-check': T('the last check didn\'t look right, so check again'),
+            'no-answer': T('no answer from GitHub')
+        }[e] || (/^(http-|E[A-Z]|network|too-big|insecure)/.test(e || '') ? T('no answer from GitHub') + ' (' + e + ')' : (e || '?'));
+    }
+    function notesHtml(text) {
+        return '<p class="dim">' + esc(T('What\'s new, from the release notes (in English):')) + '</p><div class="notes">' + esc(text.replace(/\*\*/g, '').replace(/^#+ /gm, '')) + '</div>';
+    }
     function showUpdate() {
         if (!upd || upd.error) {
-            message(T('Updates'), p(esc(T('Couldn\'t reach GitHub to check for a newer FW Block ({e}).  Check the TV is online and try again.', { e: (upd && upd.error) || '?' }))));
+            message(T('Updates'), p(esc(T('Couldn\'t check GitHub for a newer FW Block: {e}.  Check the TV is online and try again.', { e: updErr(upd && upd.error) }))));
             return;
         }
         if (!upd.newer) {
@@ -433,14 +448,14 @@
             return;
         }
         confirm(T('Update to v{v}?', { v: upd.latest }),
-            (upd.notes ? '<div class="notes">' + esc(upd.notes.replace(/\*\*/g, '').replace(/^#+ /gm, '')) + '</div>' : '') +
+            (upd.notes ? notesHtml(upd.notes) : '') +
             p(esc(T('The Homebrew Channel downloads and installs it, after checking it\'s the signed release.  The app closes and opens again.  The block stays on the whole time.'))),
             function () {
                 busy = true;
                 working(T('Updating to v{v}', { v: upd.latest }));
                 runScript('update-install', function (ok, out) {
                     var r = parse(out) || {};
-                    if (r.error) { busy = false; message(T('Updates'), p(esc(T('The update didn\'t start: {e}', { e: r.error })))); return; }
+                    if (r.error) { busy = false; message(T('Updates'), p(esc(T('The update didn\'t start: {e}', { e: updErr(r.error) })))); return; }
                     var tries = 0;
                     var poll = setInterval(function () {
                         runScript('update-status', function (ok2, out2) {
@@ -462,7 +477,7 @@
     }
     function showUpdated(v) {
         runScript('changes ' + shq(v), function (ok, out) {
-            message(T('Updated to v{v}', { v: v }), out ? '<div class="notes">' + esc(out.replace(/\*\*/g, '').replace(/^#+ /gm, '')) + '</div>' : '');
+            message(T('Updated to v{v}', { v: v }), out ? notesHtml(out) : '');
         });
     }
 
@@ -600,7 +615,7 @@
             working(T('Help and report'));
             runScript('report', function (ok, out) {
                 busy = false;
-                message(T('Help and report'), p(esc(T('Asking for help?  Copy this report into a GitHub issue or discussion:'))) + pre(out.replace(/\s+$/, ''))
+                message(T('Help and report'), p(esc(T('Asking for help?  Copy this report into a GitHub issue or discussion:'))) + pre(out.replace(/\s+$/, '')) + p('<span class="dim">' + esc(T('The report stays in English, so anyone can read it on GitHub.')) + '</span>')
                     + p('<span class="ok">' + esc(REPO) + '</span>'));
             });
         },

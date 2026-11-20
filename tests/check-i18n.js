@@ -48,11 +48,15 @@ Object.keys(I.dicts).forEach(function (lang) {
 var msgs = [];
 var sre = /\bsay "((?:[^"\\]|\\.)*)"/g;
 var body = sh.split('# ------------------------------------------------------------- status')[0];
+// Backups and restore print to the app too (updates answer in JSON)
+var bk = sh.split('# ------------------------------------------------------------- backups')[1] || '';
+body += bk.split('# ------------------------------------------------------------- updating this app')[0];
 while ((m = sre.exec(body))) {
     var s = m[1];
-    if (/\$\(date\)/.test(s) || s === '$*') { continue; }
+    if (/\$\(date\)/.test(s) || s === '$*' || /^\$(_b|\{)/.test(s)) { continue; }
     s = s.replace(/\$UPD_IP/g, '156.147.69.32').replace(/\$_miss/g, 'snu.lge.com nsu.lge.com')
-        .replace(/\$RS_IPS/g, '165.244.62.249 165.244.99.174').replace(/\$\{_bad\}/g, ' 156.147.69.32');
+        .replace(/\$RS_IPS/g, '165.244.62.249 165.244.99.174').replace(/\$\{_bad\}/g, ' 156.147.69.32')
+        .replace(/\$_bn/g, '20261119-181302').replace(/\$1/g, '20261119-181302').replace(/\$_sw/g, 'false').replace(/\$_au/g, 'off');
     if (s.indexOf('$3') >= 0) { msgs.push(s.replace('$3', 'update servers')); s = s.replace('$3', 'LG Remote Support servers'); }
     msgs.push(s);
 }
