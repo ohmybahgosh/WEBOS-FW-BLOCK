@@ -71,7 +71,7 @@ jobs:
           sh webos-app/build.sh
       - name: TV screens in a browser, with no page errors
         run: |
-          pip install playwright==1.48.0
+          pip install --upgrade playwright
           python3 -m playwright install --with-deps chromium
           python3 scripts/screenshots/shoot.py
       - uses: actions/upload-artifact@v7
