@@ -1,0 +1,28 @@
+#!/bin/sh
+# Stands in for iptables in the tests, with the rules kept in
+# $FB_ROOT/.iptables in "iptables -S" form and packet counts in
+# $FB_ROOT/.iptables.hits ("CHAIN IP COUNT").  Handles what fw-block.sh uses:
+# -S, -N, -F, -X, -A, -I CHAIN [N], -D, -C and -L CHAIN -n -v -x.
+f="$FB_ROOT/.iptables"
+[ -f "$f" ] || printf -- '-P INPUT ACCEPT\n-P FORWARD ACCEPT\n-P OUTPUT ACCEPT\n' > "$f"
+op=$1; shift
+case "$op" in
+    -S) cat "$f" ;;
+    -N) grep -qx -- "-N $1" "$f" && exit 1; echo "-N $1" >> "$f" ;;
+    -F) grep -v -- "^-A $1 " "$f" > "$f.n"; mv "$f.n" "$f" ;;
+    -X) grep -q -- "-j $1\$" "$f" && exit 1; grep -vx -- "-N $1" "$f" > "$f.n"; mv "$f.n" "$f" ;;
+    -A) c=$1; shift; grep -qx -- "-N $c" "$f" || [ "$c" = OUTPUT ] || exit 1; echo "-A $c $*" >> "$f" ;;
+    -I) c=$1; shift; case "${1:-}" in [0-9]*) shift ;; esac
+        { grep -v -- "^-A " "$f"; echo "-A $c $*"; grep -- "^-A " "$f"; } > "$f.n"; mv "$f.n" "$f" ;;
+    -C) c=$1; shift; grep -qx -- "-A $c $*" "$f" ;;
+    -D) c=$1; shift; grep -qx -- "-A $c $*" "$f" || exit 1
+        awk -v l="-A $c $*" '$0 == l && !d { d = 1; next } { print }' "$f" > "$f.n"; mv "$f.n" "$f" ;;
+    -L) c=$1; grep -qx -- "-N $c" "$f" || exit 1
+        echo "Chain $c (1 references)"
+        echo "    pkts      bytes target     prot opt in     out     source               destination"
+        grep -- "^-A $c " "$f" | while read -r _a _c _d ip _j t; do
+            n=$(awk -v c="$c" -v ip="$ip" '$1 == c && $2 == ip { print $3 }' "$FB_ROOT/.iptables.hits" 2>/dev/null)
+            printf '%8s %10s %-10s all  --  *      *       0.0.0.0/0            %s\n' "${n:-0}" "$(( ${n:-0} * 60 ))" "$t" "$ip"
+        done ;;
+    *) exit 2 ;;
+esac

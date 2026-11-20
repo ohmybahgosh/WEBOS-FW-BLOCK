@@ -1,0 +1,16 @@
+{
+    "id": "org.ohmybahgosh.fwblock",
+    "version": "0.1.0",
+    "vendor": "OhMyBahGosh",
+    "type": "web",
+    "main": "index.html",
+    "title": "FW Block",
+    "icon": "icon80.png",
+    "largeIcon": "icon130.png",
+    "iconColor": "#151a19",
+    "bgColor": "#140c0e",
+    "appDescription": "Keep LG firmware updates off a rooted LG TV",
+    "disableBackHistoryAPI": true,
+    "resolution": "1920x1080",
+    "extraLargeIcon": "icon512.png"
+}

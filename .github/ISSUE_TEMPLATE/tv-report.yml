@@ -1,0 +1,57 @@
+name: How it went on my TV
+description: Tell us how FW Block worked on your TV, good or bad
+title: "[TV] <TV model>, webOS <version>"
+labels: ["tv-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks!  Reports from real TVs show where FW Block holds, and where LG found a way around it.
+  - type: input
+    id: tv
+    attributes:
+      label: TV model
+      placeholder: OLED65C2PUA
+    validations:
+      required: true
+  - type: input
+    id: webos
+    attributes:
+      label: webOS version and firmware
+      placeholder: webOS 25 (10.3.1), firmware 43.21.77
+    validations:
+      required: true
+  - type: input
+    id: rooted
+    attributes:
+      label: How the TV was rooted
+      placeholder: RootMyTV, faultmanager-autoroot, crashd, DejaVuln...
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - Blocked, no update notices since
+        - Blocked, but I still saw an update notice (describe below)
+        - It didn't block (describe below)
+    validations:
+      required: true
+  - type: checkboxes
+    id: others
+    attributes:
+      label: Also on this TV
+      options:
+        - label: The Homebrew Channel's Block system updates
+        - label: LG-USB-2-ETH0 with --block-updates
+        - label: Blocking on my router or DNS (Pi-hole, AdGuard Home...)
+  - type: textarea
+    id: report
+    attributes:
+      label: The report
+      description: From **Help and report** in the app, or `sh fw-block.sh report`.  It has no addresses or names in it.
+      render: text
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Saw the TV reach an LG update server or address FW Block doesn't block?  Say which, and how you saw it.

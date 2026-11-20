@@ -1,0 +1,29 @@
+{
+	"service": "com.webos.service.update",
+	"methods": [
+		{
+			"path": "/getCurrentSWInformation",
+			"requiredPermissions": [
+				"READ_UPDATE_INFO"
+			]
+		},
+		{
+			"path": "/startUpdateByRemoteApp",
+			"requiredPermissions": [
+				"UPDATE_FROM_REMOTE_APP"
+			]
+		},
+		{
+			"path": "/getProgress",
+			"requiredPermissions": [
+				"UPDATE_FROM_REMOTE_APP"
+			]
+		},
+		{
+			"path": "/getStatus",
+			"requiredPermissions": [
+				"UPDATE_FROM_REMOTE_APP"
+			]
+		}
+	]
+}

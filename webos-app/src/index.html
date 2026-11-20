@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FW Block</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <img src="icon160.png" alt="">
+    <div class="titles">
+      <h1>FW Block</h1>
+      <div class="prompt"><span class="pr">root@lgtv:~#</span> fw-block status<span class="cursor"></span></div>
+    </div>
+    <span id="meta" class="meta">Loading…</span>
+  </header>
+
+  <main>
+    <section class="card" id="status">
+      <div class="hero"><span id="dot" class="dot dot-wait"></span><b id="headline">Checking…</b></div>
+      <div id="subline" class="sub">Reading how firmware updates are blocked on this TV.</div>
+      <table id="facts"></table>
+      <ul id="findings"></ul>
+    </section>
+
+    <section class="actions" id="actions">
+      <nav class="tabs" id="tabs">
+        <span class="tab" tabindex="0" data-tab="blocks">Blocks</span>
+        <span class="tab" tabindex="0" data-tab="activity">Activity</span>
+        <span class="tab" tabindex="0" data-tab="more">More</span>
+      </nav>
+      <div class="rows" id="rows">
+      <div class="btn" tabindex="0" data-tab="blocks" data-action="main"><span>Block firmware updates<small id="main-hint"></small></span> <span class="tog" id="tog-main"></span></div>
+      <div class="btn" tabindex="0" data-tab="blocks" data-action="remote"><span>LG Remote Support<small id="remote-hint"></small></span> <span class="tog" id="tog-remote"></span></div>
+      <div class="btn" tabindex="0" data-tab="blocks" data-action="phone"><span>Phone apps<small id="phone-hint"></small></span> <span class="tog" id="tog-phone"></span></div>
+      <div class="btn" tabindex="0" data-tab="blocks" data-action="guard"><span>Stop downloads<small id="guard-hint"></small></span> <span class="tog" id="tog-guard"></span></div>
+      <div class="btn" tabindex="0" data-tab="activity" data-action="check"><span>Check now<small id="check-hint">puts back anything that was undone</small></span></div>
+      <div class="btn" tabindex="0" data-tab="activity" data-action="events"><span>What it caught<small id="events-hint"></small></span></div>
+      <div class="btn" tabindex="0" data-tab="activity" data-action="layers"><span>Every block, and who keeps it<small>FW Block, LG-USB-2-ETH0 or the Homebrew Channel</small></span></div>
+      <div class="btn" tabindex="0" data-tab="more" data-action="update"><span>Updates<small id="update-hint">checks for a newer FW Block when the app opens</small></span></div>
+      <div class="btn" tabindex="0" data-tab="more" data-action="backups"><span>Backups<small id="backups-hint">made by itself before every change, so you can go back</small></span></div>
+      <div class="btn" tabindex="0" data-tab="more" data-action="help"><span>Help and report<small>a report to paste when asking for help</small></span></div>
+      <div class="btn" tabindex="0" data-tab="more" data-action="lang"><span>Language<small id="lang-hint"></small></span></div>
+      <div class="btn" tabindex="0" data-tab="more" data-action="about"><span>About<small>MIT License, by OhMyBahGosh</small></span></div>
+      </div>
+      <div class="rail" id="rail"><i class="rail-cap up"></i><b class="rail-thumb" id="rail-thumb"></b><i class="rail-cap down"></i></div>
+    </section>
+  </main>
+
+  <footer>
+    <span><span class="k">OK</span>Select</span>
+    <span><span class="k">◀ ▶</span>Tabs</span>
+    <span><span class="k">▲ ▼</span>Move</span>
+    <span><span class="k">BACK</span>Exit</span>
+    <span class="right">github.com/ohmybahgosh/WEBOS-FW-BLOCK</span>
+  </footer>
+</div>
+<div class="scan"></div>
+
+<div id="overlay" class="overlay hidden">
+  <div class="panel">
+    <div id="overlay-title" class="panel-title"></div>
+    <div id="overlay-body" class="panel-body"></div>
+    <div id="overlay-hint" class="panel-hint"></div>
+  </div>
+</div>
+
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

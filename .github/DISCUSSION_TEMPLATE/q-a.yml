@@ -1,0 +1,26 @@
+title: "[Question]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Questions and setup help live here.  Something broken goes to a [bug report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=bug-report.yml).
+
+        The [README](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK#readme) may already answer it, and the app's **What it blocks** shows each block on your TV.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What you're trying to do, and what you've tried so far.
+    validations:
+      required: true
+  - type: input
+    id: tv
+    attributes:
+      label: TV model, webOS version and firmware
+      description: For example "OLED65C2PUA, webOS 25, firmware 43.21.77".
+  - type: textarea
+    id: report
+    attributes:
+      label: Report (optional)
+      description: From **Help and report** in the app, or `sh fw-block.sh report`.
+      render: text

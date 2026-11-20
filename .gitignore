@@ -1,0 +1,8 @@
+.cache/
+webos-app/dist/
+webos-app/out/
+node_modules/
+# Signing keys never go in the repository
+*.pem
+*.key
+release-signing*

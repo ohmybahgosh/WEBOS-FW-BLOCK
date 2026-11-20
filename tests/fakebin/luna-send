@@ -1,0 +1,29 @@
+#!/bin/sh
+# Stands in for luna-send in the tests.  webOS's support settings live in
+# $FB_ROOT/.switch (softwareUpdateEnable, true unless set) and $FB_ROOT/.auto
+# (automaticUpdate, on unless set); the updater's status in $FB_ROOT/.updstatus
+# (idle unless set).  Every call is logged to $FB_ROOT/.luna.log, and
+# FAKE_LUNA_DOWN makes nothing answer.
+printf '%s\n' "$*" >> "$FB_ROOT/.luna.log"
+[ -n "${FAKE_LUNA_DOWN:-}" ] && exit 1
+case "$*" in
+    *settingsservice/getSystemSettings*softwareUpdateEnable*)
+        printf '{"settings":{"softwareUpdateEnable":"%s"},"returnValue":true}\n' "$(cat "$FB_ROOT/.switch" 2>/dev/null || echo true)" ;;
+    *settingsservice/getSystemSettings*automaticUpdate*)
+        printf '{"settings":{"automaticUpdate":"%s"},"returnValue":true}\n' "$(cat "$FB_ROOT/.auto" 2>/dev/null || echo on)" ;;
+    *settingsservice/setSystemSettings*softwareUpdateEnable*)
+        printf '%s' "$*" | sed -n 's/.*"softwareUpdateEnable":"\([a-z]*\)".*/\1/p' > "$FB_ROOT/.switch"
+        echo '{"returnValue":true}' ;;
+    *settingsservice/setSystemSettings*automaticUpdate*)
+        printf '%s' "$*" | sed -n 's/.*"automaticUpdate":"\([a-z]*\)".*/\1/p' > "$FB_ROOT/.auto"
+        echo '{"returnValue":true}' ;;
+    *service.update/getStatus*)
+        printf '{ "returnValue": true, "status": "%s" }\n' "$(cat "$FB_ROOT/.updstatus" 2>/dev/null || echo idle)" ;;
+    *service.update/cancelUpdate*)
+        echo idle > "$FB_ROOT/.updstatus"; echo '{ "returnValue": true }' ;;
+    # The Homebrew Channel installing an update; FAKE_LUNA_FAIL: a bad download
+    *hbchannel.service/install*)
+        if [ -n "${FAKE_LUNA_FAIL:-}" ]; then echo '{"returnValue":false,"errorText":"Invalid file checksum"}'
+        else echo '{"returnValue":true,"statusText":"Installing"}'; echo '{"returnValue":true,"finished":true}'; fi ;;
+    *) echo '{"returnValue":true}' ;;
+esac

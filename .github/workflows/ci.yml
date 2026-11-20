@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: ShellCheck the script (POSIX sh, like the TV)
+        run: shellcheck -s sh fw-block.sh tests/run.sh tests/fakebin/luna-send tests/fakebin/iptables webos-app/build.sh scripts/screenshots/make-demo.sh
+      - name: Script parses under dash and busybox sh
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq busybox dash
+          dash -n fw-block.sh
+          busybox sh -n fw-block.sh
+
+  test:
+    name: Tests (${{ matrix.shell }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [busybox, dash, bash]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      - name: Install shells
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq busybox dash
+      - name: Run the test suite
+        run: sh tests/run.sh ${{ matrix.shell }}
+
+  app:
+    name: TV app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      - name: The JavaScript parses
+        run: for f in webos-app/src/*.js webos-app/gen-manifest.js update.js scripts/release-sign.js tests/*.js tests/fakebin/*.js scripts/screenshots/demo.js; do node --check "$f" || exit 1; done
+      - name: Every text is translated
+        run: node tests/check-i18n.js
+      - name: Release signatures and the update check's keys
+        run: |
+          sh webos-app/build.sh --no-package
+          node tests/check-signing.js .cache/tweetnacl-1.0.3-nacl-fast.min.js
+      - name: Build the IPK and manifest
+        run: |
+          npm install -g @webos-tools/cli@3.2.6
+          sh webos-app/build.sh
+      - name: TV screens in a browser, with no page errors
+        run: |
+          pip install playwright==1.48.0
+          python3 -m playwright install --with-deps chromium
+          python3 scripts/screenshots/shoot.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ipk
+          path: webos-app/out/

@@ -1,0 +1,20 @@
+title: "[Setup]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Show off a setup that's held: your TV, its firmware, and how long it's stayed there.  It helps the next person decide.
+  - type: input
+    id: tv
+    attributes:
+      label: TV model, webOS version and firmware
+      description: For example "OLED65C2PUA, webOS 25, firmware 43.21.77".
+    validations:
+      required: true
+  - type: textarea
+    id: story
+    attributes:
+      label: Your setup
+      description: What else blocks updates on your TV or network, what FW Block caught, screenshots.
+    validations:
+      required: true
