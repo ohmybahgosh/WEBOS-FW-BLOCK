@@ -205,8 +205,25 @@ footer { bottom: 44px; left: 100px; right: 100px; font-size: 26px; }
 .again-ic { vertical-align: -5px; margin-right: 12px; color: #b3a2a6; }
 
 /* A list to pick from in the overlay (backups) */
-.pick { margin: 6px 0 4px; }
+.pick { margin: 6px 0 4px; max-height: 640px; overflow: hidden; position: relative; }
 .pick div { font-family: "DejaVu Sans Mono", monospace; font-size: 23px; padding: 10px 18px; border-radius: 12px; border: 2px solid transparent; color: #d9cbce; margin-bottom: 6px; }
 .pick div.sel { border-color: #ff2d55; background: rgba(255, 45, 85, .12); color: #fff; }
 .pick div small { display: block; font-family: Inter, sans-serif; font-size: 20px; color: #a8999c; margin-top: 2px; }
 .notes { white-space: pre-wrap; font-size: 22px; color: #e9dcdf; max-height: 430px; overflow: hidden; }
+
+/* Popups: bigger text, readable from the couch on smaller TVs too */
+.panel { width: 1560px; max-height: 1000px; overflow: hidden; padding: 50px 64px; }
+.panel-title { font-size: 52px; margin-bottom: 22px; }
+.panel-body { font-size: 36px; line-height: 1.38; }
+.panel-body p { margin: 0 0 18px; }
+.panel-body pre { font-size: 26px; }
+.panel-hint { font-size: 30px; margin-top: 24px; }
+.pick div { font-size: 30px; padding: 12px 20px; }
+.pick div small { font-size: 25px; }
+.notes { font-size: 28px; }
+.panel.tall { max-height: 1040px; }
+.panel.tall .panel-title { font-size: 42px; }
+.panel.tall .layers { font-size: 27px; }
+.panel.tall .layers small { font-size: 21px; }
+/* Long help pages: a little smaller, so they still fit */
+.panel.long .panel-body { font-size: 30px; }

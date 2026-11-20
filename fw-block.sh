@@ -62,6 +62,8 @@
 #   check [--json]    check now and put back anything that was undone
 #   events [--json]   what the block has caught and fixed, newest last
 #   report            a short summary for asking for help
+#   restart           restart the TV now (so the phone app block takes hold);
+#                     refused while the TV is installing or downloading an update
 #   backup | backups [--json] | restore NAME
 #                     a backup of what FW Block and webOS's update settings
 #                     were (made by itself before every change), the list,
@@ -74,7 +76,7 @@
 #
 # Paths can be moved under FB_ROOT for the tests.
 
-VERSION="0.1.0"
+VERSION="0.1.1"
 R="${FB_ROOT:-}"
 HERE=$(cd "$(dirname "$0")" && pwd)
 SELF="$HERE/fw-block.sh"
@@ -136,6 +138,17 @@ QUICK="${FB_QUICK:-30}"
 # LG-USB-2-ETH0's own update block: its settings, hook, hosts lines and rule
 ETH0_CONF="$R/var/lib/webosbrew/lg-usb-2-eth0.conf"
 ETH0_HOOK="$R/var/lib/webosbrew/init.d/S01fix-eth"
+# What LG-USB-2-ETH0 saved as the update settings' values before it turned
+# them off (it puts them back from these when its block is turned off)
+ETH0_UPD_MARK="$R/var/lib/webosbrew/lg-usb-2-eth0.updates"
+ETH0_AUTO_MARK="$R/var/lib/webosbrew/lg-usb-2-eth0.autoupdate"
+# The Homebrew Channel's service, to see whether its Block system updates
+# also turns webOS's update check off (webosbrew PR #264 and later)
+HBC_SVC="$R/media/developer/apps/usr/palm/services/org.webosbrew.hbchannel.service"
+HBC_APP="$R/media/developer/apps/usr/palm/applications/org.webosbrew.hbchannel"
+# Every original value FW Block saved, and where it came from, never
+# rewritten: the record to fall back on if anything goes wrong
+JOURNAL="$DATA/originals.log"
 ETH0_TAG="# lg-usb-2-eth0 block-updates"
 # Its own phone app block's mark: boot, or now (from the next TV start)
 ETH0_PHONE_MARK="$R/tmp/lg-usb-2-eth0/lg-usb-2-eth0.phone"
@@ -193,9 +206,27 @@ secure_run() {
 # ------------------------------------------------------------- settings
 
 conf_get() { sed -n "s/^$1=//p" "$CONF" 2>/dev/null | awk 'NR == 1'; }
+# conf_set KEY VALUE: written to a new file, checked, then moved over the
+# old one, so a full disk or a crash never leaves a half-written settings file
 conf_set() {
-    mkdir -p "$DATA" && chmod 700 "$DATA"
-    { grep -v "^$1=" "$CONF" 2>/dev/null; echo "$1=$2"; } > "$CONF.new" && mv -f "$CONF.new" "$CONF"
+    mkdir -p "$DATA" && chmod 700 "$DATA" || return 1
+    _cn=0; [ -f "$CONF" ] && _cn=$(grep -cv "^$1=" "$CONF")
+    { grep -v "^$1=" "$CONF" 2>/dev/null; echo "$1=$2"; } > "$CONF.new" 2>/dev/null
+    if [ "$(wc -l < "$CONF.new" 2>/dev/null)" -eq $((_cn + 1)) ] 2>/dev/null && grep -qx "$1=$2" "$CONF.new"; then
+        mv -f "$CONF.new" "$CONF"
+    else
+        rm -f "$CONF.new"
+        say "Could not save the setting $1 (is the TV's storage full?).  Nothing was changed."
+        return 1
+    fi
+}
+
+# write_file FILE VALUE: the same, for a one-line file
+write_file() {
+    mkdir -p "${1%/*}" || return 1
+    echo "$2" > "$1.new" 2>/dev/null && [ "$(cat "$1.new" 2>/dev/null)" = "$2" ] && mv -f "$1.new" "$1" && return 0
+    rm -f "$1.new"
+    return 1
 }
 setting_on() { [ "$(conf_get BLOCK)" = 1 ]; }
 # Blocking LG Remote Support is on unless it was turned off
@@ -240,6 +271,35 @@ eth0_blocking() {
 # --block-remote-support.  Those are then its to keep, so the two never
 # take turns restoring the same setting.
 eth0_auto() { eth0_blocking && grep -q automaticUpdate "$ETH0_HOOK" 2>/dev/null; }
+# The Homebrew Channel's Block system updates is on, and the installed
+# Homebrew Channel turns webOS's update check off with it
+hbc_keeps_check() {
+    hbc_blocking || return 1
+    grep -qs softwareUpdateEnable "$HBC_SVC/startup.sh" "$HBC_SVC"/*.js 2>/dev/null
+}
+# Something else wants webOS's update check off: then FW Block never turns
+# it back on, even if it was on before FW Block
+others_keep_check() { eth0_blocking || hbc_keeps_check; }
+check_keeper() {
+    if eth0_blocking; then echo eth0
+    elif setting_on; then echo fw-block
+    elif hbc_keeps_check; then echo hbc
+    fi
+}
+
+# save_orig FILE CURRENT OTHER-MARK ALLOWED: what a setting was before
+# anything turned it off, saved once.  If LG-USB-2-ETH0 turned it off first,
+# its saved value is the real original, not the "off" it left behind.
+save_orig() {
+    [ -f "$1" ] && return 0
+    _ov=$2; _os=current
+    _om=$(cat "$3" 2>/dev/null)
+    case " $4 " in *" $_om "*) [ -n "$_om" ] && { _ov=$_om; _os=lg-usb-2-eth0; } ;; esac
+    case " $4 " in *" $_ov "*) [ -n "$_ov" ] || return 0 ;; *) return 0 ;; esac
+    mkdir -p "$DATA" && chmod 700 "$DATA"
+    write_file "$1" "$_ov" || { say "Could not save what ${1##*/} was."; return 1; }
+    echo "$(now) ${1##*/} $_ov from $_os" >> "$JOURNAL" 2>/dev/null
+}
 eth0_rs() {
     [ -e "$ETH0_HOOK" ] || [ -L "$ETH0_HOOK" ] || return 1
     grep -q '^BLOCK_RS="1"$' "$ETH0_CONF" 2>/dev/null
@@ -294,15 +354,24 @@ auto_get() { sup_get automaticUpdate; }
 # The visible "Automatic software update": off, remembering what it was once
 auto_off() {
     _a=$(auto_get)
-    if [ -n "$_a" ] && [ ! -f "$AUTO_ORIG" ]; then mkdir -p "$DATA"; echo "$_a" > "$AUTO_ORIG"; fi
+    save_orig "$AUTO_ORIG" "$_a" "$ETH0_AUTO_MARK" "on off" || return 1
     if [ "$_a" = on ]; then
         if sup_set automaticUpdate off; then say "Turned Automatic software update off."; else say "Could not turn Automatic software update off."; fi
     fi
 }
+# Puts it back only when nothing else keeps it off; the saved value is only
+# deleted once that's done (a failed write keeps it, to try again)
 auto_restore() {
     [ -f "$AUTO_ORIG" ] || return 0
     if [ "$(cat "$AUTO_ORIG" 2>/dev/null)" = on ]; then
-        if sup_set automaticUpdate on; then say "Turned Automatic software update back on."; else say "Could not turn Automatic software update back on."; fi
+        if eth0_auto; then
+            say "Left Automatic software update off: LG-USB-2-ETH0 still keeps it off."
+        elif sup_set automaticUpdate on; then
+            say "Turned Automatic software update back on."
+        else
+            say "Could not turn Automatic software update back on."
+            return 1
+        fi
     fi
     rm -f "$AUTO_ORIG"
 }
@@ -366,11 +435,24 @@ hosts_add() {
 }
 # hosts_remove TAG: take out the lines with TAG.  Written in place: /etc/hosts
 # may be a bind mount that can't be replaced.
+#
+# Checked before it's written: exactly the tagged lines go, every other line
+# (the Homebrew Channel's, LG-USB-2-ETH0's, yours) stays as it was, and a
+# copy of the file as it was is kept in $RUN/hosts.before.
 hosts_remove() {
     grep -q "$1" "$HOSTS" 2>/dev/null || return 0
     hosts_writable || return 1
     secure_run
-    grep -v "$1" "$HOSTS" > "$RUN/hosts.new" 2>/dev/null && cat "$RUN/hosts.new" > "$HOSTS"
+    cp "$HOSTS" "$RUN/hosts.before" 2>/dev/null || return 1
+    grep -v "$1" "$RUN/hosts.before" > "$RUN/hosts.new" 2>/dev/null
+    [ $? -le 1 ] || { rm -f "$RUN/hosts.new"; return 1; }
+    _hb=$(wc -l < "$RUN/hosts.before"); _ht=$(grep -c "$1" "$RUN/hosts.before"); _hn=$(wc -l < "$RUN/hosts.new")
+    if [ "$_hn" -ne $((_hb - _ht)) ] || grep -q "$1" "$RUN/hosts.new"; then
+        say "Didn't change /etc/hosts: the new copy didn't come out right."
+        rm -f "$RUN/hosts.new"
+        return 1
+    fi
+    cat "$RUN/hosts.new" > "$HOSTS" || { cat "$RUN/hosts.before" > "$HOSTS"; rm -f "$RUN/hosts.new"; return 1; }
     rm -f "$RUN/hosts.new"
 }
 
@@ -575,15 +657,17 @@ block() {
     # after the startup hooks run (measured on a C2), and the settings calls
     # below can be slow
     phone_on && ! eth0_phone && phone_block "${1:-now}"
+    _s=$(switch_get)
+    # Remember what it was, once, so "off" can put it back.  Saved even while
+    # LG-USB-2-ETH0 keeps it off, so the real original is known if that
+    # block is turned off first
+    save_orig "$ORIG" "$_s" "$ETH0_UPD_MARK" "true false"
     if ! eth0_blocking; then
-        _s=$(switch_get)
-        # Remember what it was, once, so "off" can put it back
-        if [ -n "$_s" ] && [ ! -f "$ORIG" ]; then mkdir -p "$DATA"; echo "$_s" > "$ORIG"; fi
         if [ "$_s" != false ]; then
             if sup_set softwareUpdateEnable false; then say "Turned webOS's update check off."; else say "Could not turn webOS's update check off."; fi
         fi
     fi
-    eth0_auto || auto_off
+    if eth0_auto; then save_orig "$AUTO_ORIG" "$(auto_get)" "$ETH0_AUTO_MARK" "on off"; else auto_off; fi
     if ! eth0_blocking; then
         if pending; then pending_clear; say "Deleted an update webOS had already found."; fi
         hosts_add "$UPD_HOSTS" "$TAG" "update servers"
@@ -607,24 +691,31 @@ remote_unblock() {
     fw_del $RS_IPS
 }
 
+# Returns 1 if anything couldn't be undone, so nothing that's still needed
+# (the saved originals, the startup hook) is deleted after it
 unblock() {
+    _uf=0
     if [ -f "$ORIG" ]; then
-        if [ "$(cat "$ORIG" 2>/dev/null)" = true ]; then
+        _uo=$(cat "$ORIG" 2>/dev/null)
+        if [ "$_uo" = true ]; then
             if eth0_blocking; then
                 say "Left webOS's update check off: LG-USB-2-ETH0 still blocks updates."
+            elif hbc_keeps_check; then
+                say "Left webOS's update check off: the Homebrew Channel's Block system updates keeps it off."
             elif sup_set softwareUpdateEnable true; then
                 say "Turned webOS's update check back on."
             else
                 say "Could not turn webOS's update check back on."
+                _uf=1
             fi
         fi
-        rm -f "$ORIG"
+        [ $_uf = 0 ] && rm -f "$ORIG"
     fi
-    auto_restore
-    if hosts_remove "$TAG"; then :; else say "Could not take the update servers out of /etc/hosts."; fi
+    auto_restore || _uf=1
+    if hosts_remove "$TAG"; then :; else say "Could not take the update servers out of /etc/hosts."; _uf=1; fi
     fw_remove
-    phone_unblock
-    return 0
+    phone_unblock || _uf=1
+    return $_uf
 }
 
 # ------------------------------------------------------------- the hook and the check
@@ -662,13 +753,23 @@ app_gone() {
         [ $(($(now) - _ui)) -lt 900 ] && return 1
     fi
     [ -f "$APP_DIR/appinfo.json" ] && return 1
+    # The apps' storage has to be there: early in a start, or with it not
+    # mounted, every app looks missing.  The Homebrew Channel (which runs
+    # this) is one of them, so its app being there shows the storage is.
+    [ -f "$HBC_APP/appinfo.json" ] || return 1
     sleep "${FB_GONE_WAIT:-5}"
-    [ ! -f "$APP_DIR/appinfo.json" ]
+    [ ! -f "$APP_DIR/appinfo.json" ] && [ -f "$HBC_APP/appinfo.json" ]
 }
 uninstalled() {
     say "$(date): the FW Block app was uninstalled, so it undoes its changes."
+    # Only once everything is undone: otherwise the setting, the hook and the
+    # saved originals stay as they are, and the next check or start tries again
+    if ! unblock; then
+        say "Not everything could be undone yet, so its startup hook and saved settings stay to try again."
+        event uninstall-retry ""
+        return 1
+    fi
     conf_set BLOCK 0
-    unblock
     remove_hook
     [ -d "$RUN" ] && [ ! -L "$RUN" ] && rm -rf "$RUN"
     [ -d "$DATA" ] && [ ! -L "$DATA" ] && rm -rf "$DATA"
@@ -759,7 +860,8 @@ watch() {
     fi
     _next=$FIRST
     while setting_on && [ "$(cat "$PIDF" 2>/dev/null)" = $$ ]; do
-        if app_gone; then uninstalled; return 0; fi
+        # Only stops once the clean-up worked; otherwise it tries again
+        if app_gone; then uninstalled && return 0; fi
         guard_on && ! eth0_guard && guard
         if [ "$_next" -le 0 ]; then tick; _next=$EVERY; fi
         sleep "$QUICK"
@@ -810,7 +912,9 @@ cmd_off() {
     conf_set BLOCK 0
     watch_stop
     remove_hook
-    unblock
+    # A part that couldn't be undone keeps what's needed to try again:
+    # turning it off again retries it
+    unblock || say "Something couldn't be undone (above).  Its saved settings are kept: turn FW Block off again to retry."
     # Its per-start files in RAM: counts and the check's log
     [ -d "$RUN" ] && [ ! -L "$RUN" ] && rm -rf "$RUN"
     event off
@@ -907,6 +1011,7 @@ status_json() {
     printf '"on":%s,"hook":%s,"watching":%s,"owner":%s,' "$(jb "$(setting_on && echo 1)")" "$(jb "$(test -f "$HOOK" && echo 1)")" \
         "$(jb "$(watch_pid)")" "$(js "$_own")"
     printf '"level":%s,"gaps":%s,' "$(js "$(level "$_sw" "$_miss" "$_fw" "$_pend")")" "$(ja "$(gaps)")"
+    printf '"checkBy":%s,"hbcKeepsCheck":%s,' "$(js "$(check_keeper)")" "$(jb "$(hbc_keeps_check && echo 1)")"
     printf '"check":%s,"auto":%s,"hostsBlocked":%s,"hostsMissing":%s,"hostsOurs":%s,"hostsTotal":7,' \
         "$(js "$_sw")" "$(js "$(auto_get)")" "$(ja "$_bl")" "$(ja "$_miss")" "$(jn "$(hosts_ours)")"
     printf '"firewall":%s,"firewallBy":%s,"ip":%s,"pending":%s,"serverSwitch":%s,"lgFlags":%s,' \
@@ -1040,7 +1145,17 @@ backup_make() {
         echo "softwareUpdateEnable=$(switch_get)"
         echo "automaticUpdate=$(auto_get)"
         echo "block=$(setting_on && echo 1 || echo 0)"
+        # What the others had, to know whose changes were whose
+        echo "hbcBlock=$(hbc_blocking && echo 1 || echo 0)"
+        echo "hbcKeepsCheck=$(hbc_keeps_check && echo 1 || echo 0)"
+        echo "eth0Blocking=$(eth0_blocking && echo 1 || echo 0)"
+        echo "eth0SavedCheck=$(cat "$ETH0_UPD_MARK" 2>/dev/null)"
+        echo "eth0SavedAuto=$(cat "$ETH0_AUTO_MARK" 2>/dev/null)"
+        echo "savedCheck=$(cat "$ORIG" 2>/dev/null)"
+        echo "savedAuto=$(cat "$AUTO_ORIG" 2>/dev/null)"
     } > "$_bd/info"
+    [ -f "$JOURNAL" ] && cp "$JOURNAL" "$_bd/originals.log"
+    [ -f "$ETH0_CONF" ] && cp "$ETH0_CONF" "$_bd/lg-usb-2-eth0.conf"
     [ -f "$CONF" ] && cp "$CONF" "$_bd/settings"
     [ -f "$HOSTS" ] && cp "$HOSTS" "$_bd/hosts"
     # The gateway's own file, while FW Block's copy isn't over it
@@ -1119,6 +1234,7 @@ cmd_restore() {
         case "$_sw" in
             true|false)
                 if [ "$_sw" = true ] && eth0_blocking; then say "Left webOS's update check off: LG-USB-2-ETH0 blocks updates."
+                elif [ "$_sw" = true ] && hbc_keeps_check; then say "Left webOS's update check off: the Homebrew Channel's Block system updates keeps it off."
                 elif [ "$(switch_get)" != "$_sw" ]; then sup_set softwareUpdateEnable "$_sw" && say "webOS's update check: $_sw, as in the backup."
                 fi ;;
         esac
@@ -1251,6 +1367,25 @@ changes() {
         on { print }' "$HERE/CHANGELOG.md" 2>/dev/null | sed '/./,$!d'
 }
 
+# ------------------------------------------------------------- restart
+
+# Restarting the TV in the middle of an update could break it: refused while
+# the updater says it's busy or an update is installing.  Everything is
+# written to storage first.  The call is the Homebrew Channel's own.
+cmd_restart() {
+    if [ -e "$IN_PROGRESS" ] || [ -e "$USB_RUNNING" ] || [ -e "$NSU_RUNNING" ]; then
+        die "Not restarting: the TV is busy with an update right now.  Try again in a few minutes."
+    fi
+    event restart ""
+    sync
+    say "Restarting the TV..."
+    case "$(luna -n 1 luna://com.webos.service.tvpower/power/reboot '{"reason":"cpuCommand"}' 2>/dev/null)" in
+        *'"returnValue":true'*|*'"returnValue": true'*) return 0 ;;
+    esac
+    [ -n "${FB_NOMOUNT:-}" ] && { say "(test: would run reboot)"; return 0; }
+    reboot
+}
+
 # ------------------------------------------------------------- main
 
 case "${1:-status}" in
@@ -1265,6 +1400,7 @@ case "${1:-status}" in
         if [ "${2:-}" = --json ]; then status_json; else status_text; fi ;;
     events) if [ "${2:-}" = --json ]; then events_json; else cat "$EVENTS" 2>/dev/null; fi ;;
     report) report ;;
+    restart) cmd_restart ;;
     backup) backup_make manual ;;
     backups) backups_list "${2:-}" ;;
     restore) cmd_restore "${2:-}" ;;
@@ -1276,5 +1412,5 @@ case "${1:-status}" in
     boot) boot ;;
     watch) watch ;;
     version) say "$VERSION" ;;
-    *) die "Usage: sh fw-block.sh status|on|off|remote on|off|phone on|off|guard on|off|check|events|report|backup|backups|restore NAME|update-check|update-install|changes|version" ;;
+    *) die "Usage: sh fw-block.sh status|on|off|remote on|off|phone on|off|guard on|off|check|events|report|restart|backup|backups|restore NAME|update-check|update-install|changes|version" ;;
 esac

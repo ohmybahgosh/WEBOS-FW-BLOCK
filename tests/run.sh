@@ -31,7 +31,19 @@ setup() {
     # The phone gateway's file for the update service, as on webOS 26
     mkdir -p "$(dirname "$FB_ROOT$SSG")"
     cp "$HERE/fixtures/update-webos26.interface" "$FB_ROOT$SSG"
+    # The Homebrew Channel's own app and service, there on every rooted TV
+    mkdir -p "$FB_ROOT$HBC_APPD" "$FB_ROOT$HBC_SVCD"
+    echo '{"id":"org.webosbrew.hbchannel"}' > "$FB_ROOT$HBC_APPD/appinfo.json"
+    printf '#!/bin/sh\n# block updates: hosts only\n' > "$FB_ROOT$HBC_SVCD/startup.sh"
 }
+HBC_APPD=/media/developer/apps/usr/palm/applications/org.webosbrew.hbchannel
+HBC_SVCD=/media/developer/apps/usr/palm/services/org.webosbrew.hbchannel.service
+# The Homebrew Channel with webosbrew PR #264: its block turns the update check off
+hbc_new_on() {
+    : > "$FB_ROOT/var/luna/preferences/webosbrew_block_updates"
+    printf '#!/bin/sh\nluna-send -n 1 luna://com.webos.settingsservice/setSystemSettings \x27{"category":"support","settings":{"softwareUpdateEnable":"false"}}\x27\n' > "$FB_ROOT$HBC_SVCD/startup.sh"
+}
+FBD() { echo "$FB_ROOT/var/lib/webosbrew/webos-fw-block"; }
 teardown() {
     _p=$(cat "$FB_ROOT/tmp/webos-fw-block/watch.pid" 2>/dev/null)
     [ -n "$_p" ] && kill "$_p" 2>/dev/null
@@ -600,7 +612,7 @@ test_eth0_new_keeps_auto() {
     eth0_new_on
     run on
     check "automatic update left to eth0" is "$(auto)" on
-    check "no auto orig of ours" test ! -e "$FB_ROOT/var/lib/webosbrew/webos-fw-block/auto.orig"
+    check "its original saved anyway, for later" is "$(cat "$(FBD)/auto.orig")" on
     check "phone apps still ours" phone_closed
     check "remote support still ours" in_hosts "rone-tv-aic.lge.com # webos-fw-block remote-support"
     json
@@ -882,6 +894,124 @@ test_update_not_uninstall() {
     unset FB_GONE_WAIT
 }
 
+# ---- living with the Homebrew Channel and LG-USB-2-ETH0: whose value is whose
+
+test_hbc_keeps_check() {
+    hbc_new_on
+    run on
+    check "update check off" is "$(switch)" false
+    run off
+    check "left off for the Homebrew Channel" is "$(switch)" false
+    check "and says why" has "the Homebrew Channel's Block system updates keeps it off"
+    json
+    check "credited to the Homebrew Channel" is "$(field checkBy)" '"hbc"'
+    check "seen" is "$(field hbcKeepsCheck)" true
+}
+test_hbc_old_doesnt_keep_check() {
+    : > "$FB_ROOT/var/luna/preferences/webosbrew_block_updates"
+    run on
+    run off
+    check "an older Homebrew Channel doesn't: back on" is "$(switch)" true
+    json
+    check "not credited" is "$(field hbcKeepsCheck)" false
+}
+test_restore_from_backup_respects_hbc() {
+    run on
+    _b=$(cd "$(FBD)/backups" && echo *)
+    hbc_new_on
+    run restore "$_b"
+    check "the backup's 'on' not forced over the Homebrew Channel" is "$(switch)" false
+}
+test_eth0_first_original_kept() {
+    # LG-USB-2-ETH0 turned the check off first, and saved "true"
+    eth0_new_on
+    echo true > "$FB_ROOT/var/lib/webosbrew/lg-usb-2-eth0.updates"; echo false > "$FB_ROOT/.switch"
+    echo on > "$FB_ROOT/var/lib/webosbrew/lg-usb-2-eth0.autoupdate"; echo off > "$FB_ROOT/.auto"
+    run on
+    check "the real original, from LG-USB-2-ETH0's record" is "$(cat "$(FBD)/switch.orig")" true
+    check "automatic update's too" is "$(cat "$(FBD)/auto.orig")" on
+    check "where it came from, written down" grep -q "switch.orig true from lg-usb-2-eth0" "$(FBD)/originals.log"
+    # LG-USB-2-ETH0's block turned off: it puts back what it saved
+    rm -f "$FB_ROOT/var/lib/webosbrew/lg-usb-2-eth0.conf" "$FB_ROOT/var/lib/webosbrew/lg-usb-2-eth0.updates" "$FB_ROOT/var/lib/webosbrew/lg-usb-2-eth0.autoupdate"
+    echo true > "$FB_ROOT/.switch"; echo on > "$FB_ROOT/.auto"
+    run check
+    check "FW Block closes it again" is "$(switch)" false
+    check "automatic update too" is "$(auto)" off
+    run off
+    check "then puts back the real original" is "$(switch)" true
+    check "for automatic update too" is "$(auto)" on
+}
+test_failed_restore_keeps_original() {
+    run on
+    export FAKE_SETTINGS_FAIL=1
+    run off
+    check "says it couldn't" has "Could not turn webOS's update check back on"
+    check "keeps the original to retry" is "$(cat "$(FBD)/switch.orig")" true
+    check "automatic update's too" is "$(cat "$(FBD)/auto.orig")" on
+    unset FAKE_SETTINGS_FAIL
+    run off
+    check "retried: back on" is "$(switch)" true
+    check "and back on" is "$(auto)" on
+    check "then let go of it" test ! -e "$(FBD)/switch.orig"
+}
+test_uninstall_waits_for_storage() {
+    app_install
+    run_app on
+    teardown_watch
+    # Early in a start: no app looks installed, the Homebrew Channel included
+    rm -rf "$FB_ROOT$APPD" "$FB_ROOT$HBC_APPD"
+    OUT=$(FB_GONE_WAIT=0 $SH "$(FBD)/fw-block.sh" boot 2>&1)
+    check "not taken for an uninstall" lacks "was uninstalled"
+    check "still blocking" is "$(switch)" false
+    check "settings kept" test -f "$(FBD)/settings"
+}
+test_uninstall_retries() {
+    app_install
+    run_app on
+    teardown_watch
+    rm -rf "$FB_ROOT$APPD"
+    OUT=$(FAKE_SETTINGS_FAIL=1 FB_GONE_WAIT=0 $SH "$(FBD)/fw-block.sh" boot 2>&1)
+    check "says it'll try again" has "try again"
+    check "hook kept" test -e "$FB_ROOT/var/lib/webosbrew/init.d/50-webos-fw-block"
+    check "originals kept" test -f "$(FBD)/switch.orig"
+    OUT=$(FB_GONE_WAIT=0 $SH "$(FBD)/fw-block.sh" boot 2>&1)
+    check "next start finishes it" has "was uninstalled"
+    check "update check back on" is "$(switch)" true
+    check "all gone" test ! -e "$(FBD)"
+}
+test_others_lines_untouched() {
+    eth0_new_on
+    printf '0.0.0.0 ads.example # my own line\n0.0.0.0 snu.lge.com # webosbrew\n' >> "$FB_ROOT/etc/hosts"
+    printf '0.0.0.0 nsu.lge.com # lg-usb-2-eth0 block-updates\n' >> "$FB_ROOT/etc/hosts"
+    cp "$FB_ROOT/etc/hosts" "$T/before"
+    run on
+    run off
+    check "every line that wasn't ours, exactly as it was" cmp -s "$T/before" "$FB_ROOT/etc/hosts"
+}
+test_backup_records_others() {
+    eth0_new_on
+    echo true > "$FB_ROOT/var/lib/webosbrew/lg-usb-2-eth0.updates"
+    hbc_new_on
+    run backup
+    _d="$(FBD)/backups/$(cd "$(FBD)/backups" && echo *)"
+    check "the Homebrew Channel's block" grep -qx "hbcKeepsCheck=1" "$_d/info"
+    check "LG-USB-2-ETH0's block" grep -qx "eth0Blocking=1" "$_d/info"
+    check "what LG-USB-2-ETH0 saved" grep -qx "eth0SavedCheck=true" "$_d/info"
+    check "LG-USB-2-ETH0's settings file" test -f "$_d/lg-usb-2-eth0.conf"
+}
+
+test_restart() {
+    run restart
+    check "the Homebrew Channel's restart call" grep -q "tvpower/power/reboot" "$FB_ROOT/.luna.log"
+    check "noted" ev restart
+    : > "$FB_ROOT/mnt/lg/cmn_data/.UpdateIsInprogress"
+    rm -f "$FB_ROOT/.luna.log"
+    run restart
+    check "refused while an update installs" is "$RC" 1
+    check "says why" has "busy with an update"
+    check "no restart call" eval "! grep -q reboot '$FB_ROOT/.luna.log' 2>/dev/null"
+}
+
 for c in fresh on with_hbc_block off off_keeps_switch_that_was_off eth0_owns off_while_eth0_blocks_leaves_switch \
     readonly_hosts check_heals found_update_removed on_removes_found_update hits_counted server_switch_noted \
     luna_down no_iptables redirect_is_not_a_block eth0_leftover_rule others events_json boot boot_when_off boot_eth0 \
@@ -891,7 +1021,9 @@ for c in fresh on with_hbc_block off off_keeps_switch_that_was_off eth0_owns off
     eth0_new_keeps_auto eth0_remote_support eth0_rs_without_updates \
     phone_toggle guard_toggle uninstall_undoes uninstall_leaves_eth0 ssh_only_not_uninstalled app_update_not_uninstall \
     eth0_keeps_phone_and_downloads eth0_phone_off_fwblock_takes_it eth0_phone_pending \
-    backups update update_not_uninstall; do
+    backups update update_not_uninstall \
+    hbc_keeps_check hbc_old_doesnt_keep_check restore_from_backup_respects_hbc eth0_first_original_kept \
+    failed_restore_keeps_original uninstall_waits_for_storage uninstall_retries others_lines_untouched backup_records_others restart; do
     t "$c" "test_$c"
 done
 

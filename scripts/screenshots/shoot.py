@@ -19,7 +19,9 @@ SHOTS = [
     ('tv-caught', 'blocked', ['ArrowRight', 'ArrowDown', 'Enter']),
     ('tv-confirm', 'eth0', ['Enter']),
     ('tv-more', 'blocked', ['ArrowRight', 'ArrowRight']),
-    ('tv-backups', 'blocked', ['ArrowRight', 'ArrowRight', 'ArrowDown', 'Enter', 'ArrowDown']),
+    ('tv-explain', 'blocked', ['ArrowRight', 'ArrowRight', 'Enter']),
+    ('tv-restart', 'pending', ['ArrowDown', 'ArrowDown', 'Enter', 'Enter']),
+    ('tv-backups', 'blocked', ['ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowDown', 'Enter', 'ArrowDown']),
 ]
 with sync_playwright() as p:
     b = p.chromium.launch()

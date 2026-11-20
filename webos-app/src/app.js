@@ -134,7 +134,12 @@
         if (s.hbcBlock) { w.push(T('Homebrew Channel')); }
         return w.join(' + ');
     }
-    function checkWho(s) { return s.owner === 'eth0' ? ETH0 : (s.on ? T('FW Block') : ''); }
+    function checkWho(s) {
+        if (s.checkBy === 'eth0' || (!s.checkBy && s.owner === 'eth0')) { return ETH0; }
+        if (s.checkBy === 'fw-block' || (!s.checkBy && s.on)) { return T('FW Block'); }
+        if (s.checkBy === 'hbc') { return T('Homebrew Channel'); }
+        return '';
+    }
     // "off · LG-USB-2-ETH0"
     function by(v, who) { return who ? v + '  ·  ' + who : v; }
 
@@ -279,13 +284,21 @@
         // The layers list gets the tighter panel
         document.querySelector('.panel').className = 'panel' + (body.indexOf('class="layers"') >= 0 ? ' tall' : '');
     }
+    var onClose = null;
     function closeOverlay() {
+        var after = onClose;
         overlayMode = null;
         onConfirm = null;
+        onClose = null;
         $('overlay').className = 'overlay hidden';
         focusCurrent();
+        if (after) { after(); }
     }
-    function message(title, body) { overlay('message', title, body, T('Press OK or BACK to close.')); }
+    // message(title, body[, after]): after runs once it's closed
+    function message(title, body, after) {
+        overlay('message', title, body, T('Press OK or BACK to close.'));
+        onClose = after || null;
+    }
     function confirm(title, body, fn) {
         onConfirm = fn;
         overlay('confirm', title, body, T('Press OK to go ahead, or BACK to cancel.'));
@@ -296,6 +309,14 @@
         $('overlay-body').innerHTML = (pickItems.intro || '') + '<div class="pick">' + pickItems.map(function (it, i) {
             return '<div class="' + (i === pickAt ? 'sel' : '') + '" data-i="' + i + '">' + esc(it.label) + (it.sub ? '<small>' + esc(it.sub) + '</small>' : '') + '</div>';
         }).join('') + '</div>';
+        // Long lists scroll to keep the chosen one in view
+        var box = $('overlay-body').querySelector('.pick'), sel = box && box.querySelector('.sel');
+        if (box && sel) {
+            // .pick is the items' offsetParent (position: relative)
+            var top = sel.offsetTop, bottom = top + sel.offsetHeight;
+            if (top < box.scrollTop) { box.scrollTop = top; }
+            else if (bottom > box.scrollTop + box.clientHeight) { box.scrollTop = bottom - box.clientHeight; }
+        }
         Array.prototype.slice.call($('overlay-body').querySelectorAll('.pick div')).forEach(function (el) {
             el.addEventListener('mouseover', function () { pickAt = +el.getAttribute('data-i'); pickDraw(); });
             el.addEventListener('click', function (ev) { ev.stopPropagation(); var it = pickItems[+el.getAttribute('data-i')]; closeOverlay(); if (it) { it.fn(); } });
@@ -481,6 +502,72 @@
         });
     }
 
+    // ------------------------------------------------------------------ restart
+
+    // The phone app block waits for the next TV start: offer to restart now
+    function phoneWaiting(s) { return !!(s && s.phone && s.phone.present && !s.phone.blocked && s.phone.nextStart); }
+    function offerRestart(title, resultText, who) {
+        confirm(T('Restart the TV now?'),
+            (resultText ? pre(resultText) : '') +
+            p(esc(who === 'eth0'
+                ? T('LG-USB-2-ETH0 blocks phone apps from the next TV start.  Restart now to finish, or choose BACK and it happens the next time the TV starts.')
+                : T('Everything else is already blocked.  Phone apps are blocked from the next TV start: restart now to finish, or choose BACK and it happens the next time the TV starts.'))) +
+            p('<span class="dim">' + esc(T('The TV turns off and on again, which takes about a minute.  FW Block won\'t restart it while an update is installing.')) + '</span>'),
+            function () {
+                busy = true;
+                working(T('Restarting the TV'));
+                runScript('restart', function (ok, out, err) {
+                    busy = false;
+                    if (!ok) { message(T('Restart the TV now?'), pre(TS((err || out || '').replace(/\s+$/, '')))); }
+                });
+            });
+    }
+    // Turn something on, then offer the restart if the phone block is waiting
+    function actThenRestart(title, args) {
+        act(title, args, function (ok, text) {
+            if (ok && phoneWaiting(state) && state.phone.by !== 'eth0') { offerRestart(title, text, 'fw-block'); return; }
+            message(ok ? T('{title}: done', { title: title }) : T('{title}: something went wrong', { title: title }), text ? pre(text) : '');
+        });
+    }
+
+    // ------------------------------------------------------------------ what each block does
+
+    function explainItems() {
+        var E = [
+            [T('1.  webOS\'s own update check'), T('Off, so the updater doesn\'t ask LG at all'),
+                [T('webOS has two settings that decide whether the TV looks for updates: a hidden one (softwareUpdateEnable) and the visible Automatic software update.  The automatic check reads both.  FW Block turns both off.'),
+                 T('They\'re saved settings, so they hold from the moment the TV starts, before anything else is in place.  This alone stops the updater from asking LG.'),
+                 T('FW Block remembers what they were and puts them back when turned off, unless LG-USB-2-ETH0 or the Homebrew Channel still keeps them off.  Then it leaves them off, so the update check never comes back on behind another app\'s back.')]],
+            [T('2.  Updates it already found'), T('Deleted, so they can\'t install'),
+                [T('If webOS found or downloaded an update before the block was on, the details it saved are deleted, so it can\'t install and a waiting prompt goes away.'),
+                 T('This is checked again every 10 minutes and at every start.')]],
+            [T('3.  LG\'s update servers'), T('All seven sent nowhere'),
+                [T('snu, su, su-ssl, su-dev, snu-dev, nsu and ngfts.lge.com are sent nowhere in /etc/hosts.  The Homebrew Channel\'s Block system updates covers four of them; FW Block adds the rest.'),
+                 T('Only lines nothing else has are added, marked as FW Block\'s, so turning it off takes out exactly those and leaves every other line as it was.')]],
+            [T('4.  The address with no name'), T('Dropped by a firewall rule'),
+                [T('LG can switch the updater to a server it reaches straight by its address (156.147.69.32), which no hosts file can block.'),
+                 T('A firewall rule in a chain of FW Block\'s own (FWBLOCK) drops it.  The rule also counts every try, which is how What it caught knows the updater tried.')]],
+            [T('5.  LG Remote Support'), T('Its servers blocked, with a switch'),
+                [T('During an LG Remote Support session, LG\'s staff can hand the updater a download address directly, skipping the update check.'),
+                 T('FW Block blocks Remote Support\'s servers and the two addresses it uses without a name.  While it\'s on, LG support can\'t connect: turn it off first if they ever need to.')]],
+            [T('6.  Phone apps'), T('Can\'t start an update; casting still works'),
+                [T('A paired phone app with LG\'s update permission can tell the TV to update from a file on the phone.  That comes straight over your home network, so no server block touches it.'),
+                 T('The TV\'s phone connection reads what phones may do from one small file per service.  FW Block covers the update service\'s file with a copy that keeps only its read-only calls.  Casting, the phone remote and the ThinQ app keep working.'),
+                 T('The phone connection reads that file when the TV starts, so this holds from the next start.  FW Block offers to restart the TV for you.')]],
+            [T('7.  Stop downloads'), T('A download that starts anyway, cancelled'),
+                [T('The last line of defense, for a route nobody knows of yet.  Every 30 seconds, only while the updater says it\'s busy, FW Block asks what it\'s doing and cancels a download, with a notice on the TV.'),
+                 T('An install already running is never stopped (that could break the TV), and a USB update you start yourself is left alone.')]],
+            [T('Kept closed'), T('Checked every 10 minutes and at every start'),
+                [T('These TVs can go weeks in standby without a start, so FW Block checks all of the above every 10 minutes and puts back anything that was undone.  What it caught lists everything it stopped or put back.'),
+                 T('A startup hook in the Homebrew Channel\'s init.d does it all again at every start.')]],
+            [T('Safety and other apps'), T('Backups, and never touching their settings'),
+                [T('FW Block never changes the Homebrew Channel\'s or LG-USB-2-ETH0\'s settings, lines or rules.  It reads them to know what they already block, and adds only the rest.'),
+                 T('Before it turns on, restores a backup or installs an update, it saves a backup.  Settings are written to a new file and checked before they replace the old one.  If something can\'t be undone, it keeps what it needs and tries again.'),
+                 T('Uninstalling the app undoes everything it added, once it\'s sure the app is really gone.')]]
+        ];
+        return E;
+    }
+
     var actions = {
         main: function () {
             var s = state || {};
@@ -489,7 +576,7 @@
                     (s.eth0 && s.eth0.blocking ? p(esc(T('LG-USB-2-ETH0 already blocks updates, so FW Block adds only what it lacks, and takes over if that\'s turned off.  It doesn\'t change LG-USB-2-ETH0\'s settings.'))) : '')
                     + p(esc(T('This turns webOS\'s update checks off, deletes any update it already found, sends LG\'s update servers and Remote Support nowhere, drops the addresses they use without a name, and stops paired phone apps from starting an update.  A download that starts anyway is stopped.  It does that again at every start, and checks every 10 minutes.')))
                     + p(esc(T('The Homebrew Channel\'s own settings aren\'t changed.  Turning it off undoes all of it.'))),
-                    function () { act(T('Block firmware updates'), 'on'); });
+                    function () { actThenRestart(T('Block firmware updates'), 'on'); });
             } else {
                 confirm(T('Turn FW Block off?'),
                     p(esc(T('This removes only what FW Block added: its lines in /etc/hosts, its firewall rules, the phone app block and its startup hook, and puts back the update settings it changed.'))) + othersStay(s)
@@ -516,7 +603,19 @@
             var s = state || {};
             if (!s.phone || !s.phone.present) { return; }
             if (s.phone.eth0) {
+                if (phoneWaiting(s)) { offerRestart(T('Phone apps'), '', 'eth0'); return; }
                 message(T('Phone apps'), p(esc(T('LG-USB-2-ETH0 blocks phone apps from starting an update on this TV.  FW Block leaves that to it.  To change it, use LG-USB-2-ETH0.'))));
+                return;
+            }
+            if (s.on && s.phone.on && phoneWaiting(s)) {
+                pick(T('Phone apps'), p(esc(T('Phone apps are blocked from the next TV start.'))), [
+                    { label: T('Restart the TV now'), sub: T('so the block takes hold right away'), fn: function () { offerRestart(T('Phone apps'), '', 'fw-block'); } },
+                    { label: T('Stop blocking phone apps'), sub: T('turn this block off instead'), fn: function () {
+                        confirm(T('Stop blocking phone apps?'),
+                            p(esc(T('A paired phone app with LG\'s update permission can then make the TV update from a file on the phone, over your home network.  No other block stops that.'))) + p(esc(T('It takes effect at the next TV start.'))),
+                            function () { act(T('Phone apps'), 'phone off'); });
+                    } }
+                ]);
                 return;
             }
             if (!s.on) { needsMain(); return; }
@@ -525,7 +624,7 @@
                     p(esc(T('A paired phone app with LG\'s update permission can then make the TV update from a file on the phone, over your home network.  No other block stops that.'))) + p(esc(T('It takes effect at the next TV start.'))),
                     function () { act(T('Phone apps'), 'phone off'); });
             } else {
-                act(T('Phone apps'), 'phone on');
+                actThenRestart(T('Phone apps'), 'phone on');
             }
         },
         guard: function () {
@@ -549,6 +648,18 @@
                 p(esc(T('Free and open source under the MIT License.  Copyright (c) 2026 OhMyBahGosh.  The full license is in the app\'s LICENSE file and on GitHub.'))) +
                 p(esc(T('Not affiliated with LG Electronics.  LG and webOS are trademarks of their owners.'))) +
                 p('<span class="ok">' + esc(REPO) + '</span>'));
+        },
+        explain: function () {
+            var E = explainItems();
+            function list(at) {
+                pick(T('What each block does'), p(esc(T('Choose one to read more.'))), E.map(function (e, i) {
+                    return { label: e[0], sub: e[1], fn: function () {
+                        message(e[0], e[2].map(function (t) { return p(esc(t)); }).join(''), function () { list(i); });
+                    } };
+                }));
+                if (at) { pickAt = at; pickDraw(); }
+            }
+            list(0);
         },
         update: function () {
             if (!upd || upd.error) {
@@ -779,6 +890,16 @@
             current = buttons().indexOf(document.querySelector('[data-action="lang"]'));
         }
     } catch (e) { /* first row */ }
+    // The layout is drawn for 1920x1080.  webOS scales it for the screen
+    // (appinfo's resolution), but where the browser doesn't, scale it here so
+    // nothing runs off a smaller screen
+    function fitScreen() {
+        var w = window.innerWidth || 1920, h = window.innerHeight || 1080;
+        var z = Math.min(w / 1920, h / 1080);
+        document.body.style.zoom = (z > 0.3 && z < 0.98) ? String(z) : '';
+    }
+    fitScreen();
+    window.addEventListener('resize', fitScreen);
     fitRows();
     focusCurrent();
     refresh(function () {

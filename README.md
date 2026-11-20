@@ -38,7 +38,7 @@ One firmware update can take root off your LG TV for good, along with everything
 > It checks all of it every 10 minutes and at every start, and puts back anything that was undone.  [What it blocks](#what-it-blocks)
 
 > [!NOTE]
-> **This is the first version (0.1.0), so bugs may occur.**  It has run on a real LG C2 with webOS 25 and passes its tests against a fake TV under the TV's own shell, but it hasn't met many TVs yet.  If something looks wrong, please open a [bug report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=bug-report.yml), and a [TV report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=tv-report.yml) helps even when it works.
+> **This is an early version, so bugs may occur.**  It has run on a real LG C2 with webOS 25 and passes its tests against a fake TV under the TV's own shell, but it hasn't met many TVs yet.  If something looks wrong, please open a [bug report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=bug-report.yml), and a [TV report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=tv-report.yml) helps even when it works.
 
 <details>
 <summary><b>How this is built: AI-assisted, tested on a real TV</b></summary>
@@ -103,7 +103,7 @@ sh /tmp/fw-block.sh status   # see what's blocked first (changes nothing)
 sh /tmp/fw-block.sh on       # block now and at every start
 ```
 
-The phone app block takes hold from the next TV start (the TV's phone connection reads its settings when it starts), so restart the TV once after turning FW Block on.
+The phone app block takes hold from the next TV start (the TV's phone connection reads its settings when it starts), so the app offers to restart the TV right after you turn it on.  Over SSH, run `sh fw-block.sh restart`.
 
 ## Why not just the Homebrew Channel's switch?
 
@@ -136,7 +136,7 @@ Three tabs, sized for a big screen and the remote, in English, Russian or Spanis
 
 - **Blocks:** **Block firmware updates** (the main switch), **LG Remote Support**, **Phone apps** and **Stop downloads**, each with a line on what it does.  A tag says why a switch is off: your choice, needs the main switch, or kept by another app.
 - **Activity:** **Check now** (puts back anything undone), **What it caught** (every updater try stopped, update deleted and part put back), and **Every block, and who keeps it**.
-- **More:** **Updates**, **Backups**, **Help and report** (a short report to paste into an issue), **Language** and **About**.
+- **More:** **What each block does** (every block explained, one page each), **Updates**, **Backups**, **Help and report** (a short report to paste into an issue), **Language** and **About**.
 
 Green means blocked, amber means waiting (like the phone block before the next start) or off by your choice, and red means open.
 
@@ -154,7 +154,9 @@ Each time it opens, the app asks GitHub for a newer release, and **Updates** in 
 
 Only a release signed with the project's release key (or its backup key, in case the main one is ever lost) is accepted, only from this project's own release address, and the Homebrew Channel checks the download's SHA-256 before it installs.  That check is the only network request FW Block ever makes, and only when the app is open.  [SECURITY.md](SECURITY.md#verifying-a-download) has the keys.
 
-<p><img src="assets/screenshots/tv-more.png" width="49%" alt="The More tab: Updates (up to date, v0.1.0), Backups, Help and report, Language"> <img src="assets/screenshots/tv-backups.png" width="49%" alt="Backups: Back up now, and two dated backups, each with FW Block on or off and the update settings it had"></p>
+<p><img src="assets/screenshots/tv-explain.png" width="49%" alt="What each block does: the update check, found updates, update servers, the address with no name, Remote Support, phone apps and stop downloads, one page each"> <img src="assets/screenshots/tv-restart.png" width="49%" alt="After turning the block on: everything else is blocked, and phone apps from the next start, with an offer to restart the TV now"></p>
+
+<p><img src="assets/screenshots/tv-more.png" width="49%" alt="The More tab: What each block does, Updates (up to date), Backups, Help and report"> <img src="assets/screenshots/tv-backups.png" width="49%" alt="Backups: Back up now, and two dated backups, each with FW Block on or off and the update settings it had"></p>
 
 ## With LG-USB-2-ETH0 and the Homebrew Channel
 
@@ -203,6 +205,9 @@ Any rooted LG webOS TV with the Homebrew Channel should work: the update path an
 - **No system service is restarted,** no LG program is deleted or renamed, and an install already running is never interrupted.
 - **Never touches another app.**  The Homebrew Channel's settings, LG-USB-2-ETH0's settings, lines and rules, and other blockers' rules stay as they are.
 - **Backups before every change,** and **Turn FW Block off** puts webOS's update settings back the way they were.
+- **When in doubt, updates stay blocked.**  It never turns webOS's update check back on while LG-USB-2-ETH0 or the Homebrew Channel keeps it off, and if LG-USB-2-ETH0 turned a setting off first, FW Block saves LG-USB-2-ETH0's record of the original, not the "off" it left.  Every original it saves goes in a log that's never rewritten.
+- **Nothing half-done.**  Settings are written to a new file and checked before they replace the old one, `/etc/hosts` is copied before FW Block takes its lines out and checked that only those went, and anything that can't be undone keeps what it needs to try again.
+- **Uninstall detection that can't misfire:** checked twice, never during an app update, and only when the Homebrew Channel's own app is visible too (so storage that isn't mounted yet doesn't look like an uninstall).
 - **No network requests,** except the update check from the app, against a signed release.  It opens no ports and sends nothing about you or your TV anywhere.
 - **Tested on every push:** the script runs against a fake TV (its own `/etc/hosts`, settings service, firewall, phone gateway and update folders) under busybox `sh` (the TV's shell), dash and bash, along with ShellCheck, a translation check, the signing checks, a build of the TV app and its screens in a browser.
 
@@ -232,10 +237,14 @@ sh fw-block.sh events          # what it caught and fixed
 sh fw-block.sh backups         # the backups it made; backup makes one, restore NAME puts one back
 sh fw-block.sh update-check    # a newer release?  update-install gets it
 sh fw-block.sh changes         # what changed in this version
+sh fw-block.sh restart         # restart the TV now (refused during an update)
 sh fw-block.sh report          # a short report for asking for help
 ```
 
 ## FAQ
+
+**What if the Homebrew Channel's own block starts turning the update check off too?**
+A pending Homebrew Channel change (webosbrew PR #264) does that.  FW Block already checks the installed Homebrew Channel for it, names it as what keeps the update check off, and never turns the check back on behind it.
 
 **Does turning FW Block off turn off LG-USB-2-ETH0's block, or the Homebrew Channel's?**
 No.  FW Block only removes what it added itself.  Their settings, `/etc/hosts` lines and firewall rules stay exactly as they were.
@@ -247,7 +256,7 @@ No.  Newer LG-USB-2-ETH0 versions block everything FW Block does.  If you instal
 Yes.  The phone block only takes away the update service's update calls.  Every other phone call stays the same, which we checked with LG's own gateway code on webOS 25 and 26.
 
 **Why does the phone block say "from the next TV start"?**
-The TV's phone connection reads which calls it offers when it starts, and FW Block never restarts it (it's shared with other parts of webOS).  Restart the TV once and it holds from then on.
+The TV's phone connection reads which calls it offers when it starts, and FW Block never restarts just that part (it's shared with other parts of webOS).  Restart the TV once and it holds from then on: the app offers to do it for you right after you turn the block on.
 
 **I still see an update notice.**
 Open **Check now**.  If webOS had already found an update before FW Block was on, it's deleted and the notice goes away.  If a notice keeps coming back, please open a [bug report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=bug-report.yml) with the app's **Help and report**.

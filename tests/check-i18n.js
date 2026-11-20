@@ -51,9 +51,11 @@ var body = sh.split('# ---------------------------------------------------------
 // Backups and restore print to the app too (updates answer in JSON)
 var bk = sh.split('# ------------------------------------------------------------- backups')[1] || '';
 body += bk.split('# ------------------------------------------------------------- updating this app')[0];
+var rs = sh.split('# ------------------------------------------------------------- restart')[1] || '';
+body += rs.split('# ------------------------------------------------------------- main')[0];
 while ((m = sre.exec(body))) {
     var s = m[1];
-    if (/\$\(date\)/.test(s) || s === '$*' || /^\$(_b|\{)/.test(s)) { continue; }
+    if (/\$\(date\)/.test(s) || s === '$*' || /^\$(_b|\{)/.test(s) || /^\(test:/.test(s)) { continue; }
     s = s.replace(/\$UPD_IP/g, '156.147.69.32').replace(/\$_miss/g, 'snu.lge.com nsu.lge.com')
         .replace(/\$RS_IPS/g, '165.244.62.249 165.244.99.174').replace(/\$\{_bad\}/g, ' 156.147.69.32')
         .replace(/\$_bn/g, '20261119-181302').replace(/\$1/g, '20261119-181302').replace(/\$_sw/g, 'false').replace(/\$_au/g, 'off');

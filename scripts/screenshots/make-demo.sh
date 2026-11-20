@@ -105,6 +105,13 @@ q() { node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(0,
     stopw
 
     cat <<'EOJ'
+// Blocked, with the phone app block waiting for the next start
+TVS.pending = (function () {
+    var t = JSON.parse(JSON.stringify(TVS.blocked)), st = JSON.parse(t.status);
+    st.phone.blocked = false; st.phone.nextStart = true;
+    t.status = JSON.stringify(st);
+    return t;
+}());
 var m = /[?&]tv=(\w+)/.exec(window.location.search);
 var tv = TVS[(m && m[1]) || 'blocked'] || TVS.blocked;
 window.FB_DEMO = function (args, cb) {
@@ -114,7 +121,7 @@ window.FB_DEMO = function (args, cb) {
         else if (a === 'events') { cb(true, tv.events, ''); }
         else if (a === 'report') { cb(true, tv.report, ''); }
         else if (a === 'on' || a === 'off') { cb(true, tv[a] || '', ''); }
-        else if (a === 'update-check') { cb(true, '{"current":"0.1.0","latest":"0.1.0","newer":false,"ipkUrl":"","sha256":"","notes":"","published":""}', ''); }
+        else if (a === 'update-check') { cb(true, '{"current":"0.1.1","latest":"0.1.1","newer":false,"ipkUrl":"","sha256":"","notes":"","published":""}', ''); }
         else if (a === 'backups') { cb(true, '[{"name":"20261119-181302","time":1795129982,"reason":"on","version":"0.1.0","check":"true","auto":"on","block":false},{"name":"20261118-090511","time":1795019111,"reason":"manual","version":"0.1.0","check":"false","auto":"off","block":true}]', ''); }
         else { cb(false, '', 'unknown'); }
     }, 60);

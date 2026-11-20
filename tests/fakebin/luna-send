@@ -6,6 +6,8 @@
 # FAKE_LUNA_DOWN makes nothing answer.
 printf '%s\n' "$*" >> "$FB_ROOT/.luna.log"
 [ -n "${FAKE_LUNA_DOWN:-}" ] && exit 1
+# FAKE_SETTINGS_FAIL: webOS refuses to change a setting
+case "$*" in *setSystemSettings*) [ -n "${FAKE_SETTINGS_FAIL:-}" ] && { echo '{"returnValue":false,"errorText":"busy"}'; exit 0; } ;; esac
 case "$*" in
     *settingsservice/getSystemSettings*softwareUpdateEnable*)
         printf '{"settings":{"softwareUpdateEnable":"%s"},"returnValue":true}\n' "$(cat "$FB_ROOT/.switch" 2>/dev/null || echo true)" ;;
