@@ -2,6 +2,20 @@
 
 All notable changes to WEBOS-FW-BLOCK.  Versions follow [semantic versioning](https://semver.org/).
 
+## [1.0.0] - 2026-11-20
+
+### Changed
+
+- **1.0.0: the block is complete.**  Every update route found (the updater's own check, LG Remote Support, phone apps and downloads that start anyway) has a block, it works alongside the Homebrew Channel and LG-USB-2-ETH0, it backs up before changing anything, and it updates itself only from signed releases.  It has been tested on one TV so far, so reports from other TVs are still welcome.
+
+### Fixed
+
+- **Spanish and Russian wording.**  A few Russian texts were reworded.
+
+### Security
+
+- **An update is checked twice before it installs.**  The script now also makes sure the download is this app's own IPK, from its own GitHub releases, for exactly the version offered, before handing it to the Homebrew Channel.  Until now only the update check made sure of that.
+
 ## [0.1.2] - 2026-11-20
 
 ### Added

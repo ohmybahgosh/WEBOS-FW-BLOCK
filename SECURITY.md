@@ -56,7 +56,7 @@ RWRN/D4IwUk2lLzkmxyap22UKY0boFGZwFIxu9MzQEVIaoumsdWWmY6G
 Each release has a `.minisig` file next to the IPK, the script, the manifest, the translated changelogs (`changelog.es.md`, `changelog.ru.md`) and `SHA256SUMS`.  The app only shows translated release notes whose signature checks out, the same way as the manifest.  To check one:
 
 ```sh
-minisign -Vm org.ohmybahgosh.fwblock_0.1.0_all.ipk -P RWQyan7EPkJW9+KGMzThbQap5637AGhavzN+fDTC4vl4FLLQc0zKdzP9
+minisign -Vm org.ohmybahgosh.fwblock_1.0.0_all.ipk -P RWQyan7EPkJW9+KGMzThbQap5637AGhavzN+fDTC4vl4FLLQc0zKdzP9
 ```
 
 ## Known limits

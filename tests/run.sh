@@ -484,6 +484,8 @@ test_remote_hits() {
 
 test_guard_cancels_download() {
     run on
+    # The background watch checks downloads as it starts: stopped, so only this check acts
+    teardown_watch
     : > "$FB_ROOT/tmp/nsu-running"
     echo downloading > "$FB_ROOT/.updstatus"
     : > "$FB_ROOT/mnt/lg/cmn_data/swupdate/Image_Update_Info.xml"
@@ -498,6 +500,8 @@ test_guard_cancels_download() {
 
 test_guard_leaves_install() {
     run on
+    # The background watch checks downloads as it starts: stopped, so only this check acts
+    teardown_watch
     : > "$FB_ROOT/mnt/lg/cmn_data/.UpdateIsInprogress"
     echo installing > "$FB_ROOT/.updstatus"
     run check
@@ -508,6 +512,8 @@ test_guard_leaves_install() {
 
 test_guard_leaves_usb() {
     run on
+    # The background watch checks downloads as it starts: stopped, so only this check acts
+    teardown_watch
     : > "$FB_ROOT/tmp/usbupdate-running"
     echo downloading > "$FB_ROOT/.updstatus"
     run check
@@ -516,6 +522,8 @@ test_guard_leaves_usb() {
 
 test_guard_quiet_when_idle() {
     run on
+    # The background watch checks downloads as it starts: stopped, so only this check acts
+    teardown_watch
     : > "$FB_ROOT/.luna.log"
     run check
     check "updater not asked" eval "! grep -q 'service.update/getStatus' '$FB_ROOT/.luna.log'"
@@ -892,6 +900,14 @@ test_update() {
         release_stop
         unset FAKE_IPK_URL FAKE_IPK_V
     done
+    # A check's answer changed afterwards (not through update.js): the
+    # script itself only hands over this app's own IPK for that version
+    _cj="$FB_ROOT/tmp/webos-fw-block/self-update/check.json"
+    printf '{"current":"0.0.1","latest":"9.9.9","newer":true,"ipkUrl":"https://evil.example/download/v9.9.9/org.ohmybahgosh.fwblock_9.9.9_all.ipk","sha256":"%s"}\n' "$(printf 'ab%.0s' $(seq 32))" > "$_cj"
+    : > "$FB_ROOT/.luna.log"
+    run update-install
+    check "edited check: refused" has bad-check
+    check "edited check: nothing handed over" eval "! grep -q hbchannel.service/install '$FB_ROOT/.luna.log'"
     run changes 0.1.0
     check "what changed in a version" has "Block firmware updates, with one button"
     unset FB_NODE

@@ -38,7 +38,7 @@ One firmware update can take root off your LG TV for good, along with everything
 > It checks all of it every 10 minutes and at every start, and puts back anything that was undone.  [What it blocks](#what-it-blocks)
 
 > [!NOTE]
-> **This is an early version, so bugs may occur.**  It has run on a real LG C2 with webOS 25 and passes its tests against a fake TV under the TV's own shell, but it hasn't met many TVs yet.  If something looks wrong, please open a [bug report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=bug-report.yml), and a [TV report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=tv-report.yml) helps even when it works.
+> **Tested on one TV so far.**  1.0.0 runs on a real LG C2 with webOS 25 and passes its tests against a fake TV under the TV's own shell, but it hasn't met many other TVs yet.  If something looks wrong, please open a [bug report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=bug-report.yml), and a [TV report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=tv-report.yml) helps even when it works.
 
 <details>
 <summary><b>How this is built: AI-assisted, tested on a real TV</b></summary>

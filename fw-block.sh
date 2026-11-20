@@ -76,7 +76,7 @@
 #
 # Paths can be moved under FB_ROOT for the tests.
 
-VERSION="0.1.2"
+VERSION="1.0.0"
 R="${FB_ROOT:-}"
 HERE=$(cd "$(dirname "$0")" && pwd)
 SELF="$HERE/fw-block.sh"
@@ -1302,6 +1302,9 @@ upd_valid() {
     case "$_vu" in *[!A-Za-z0-9:/._-]*) return 1 ;; esac
     printf '%s' "$_vh" | grep -Eq '^[0-9a-f]{64}$' || return 1
     printf '%s' "$_vv" | grep -Eq '^[0-9]+(\.[0-9]+)+$' || return 1
+    # Exactly this app's own IPK for that version, from its own releases
+    # (update.js checks this too; checked again here, as it's what installs)
+    [ "$_vu" = "${FB_RELEASE_BASE:-https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/releases}/download/v$_vv/org.ohmybahgosh.fwblock_${_vv}_all.ipk" ]
 }
 
 update_install() {
