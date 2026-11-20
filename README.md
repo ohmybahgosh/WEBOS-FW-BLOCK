@@ -40,6 +40,23 @@ One firmware update can take root off your LG TV for good, along with everything
 > [!NOTE]
 > **This is the first version (0.1.0), so bugs may occur.**  It has run on a real LG C2 with webOS 25 and passes its tests against a fake TV under the TV's own shell, but it hasn't met many TVs yet.  If something looks wrong, please open a [bug report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=bug-report.yml), and a [TV report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=tv-report.yml) helps even when it works.
 
+<details>
+<summary><b>How this is built: AI-assisted, tested on a real TV</b></summary>
+
+<br>
+
+I, [OhMyBahGosh](https://github.com/ohmybahgosh), build FW Block with AI coding agents (Claude), directed, reviewed and tested by me.  AI writes a lot of the code here; I decide what it does, check how it does it, and nothing ships until it's run on a real TV (an LG C2 on webOS 25).
+
+The fixes that mattered most came from that real-TV testing, not from the AI: `luna-send` quietly eating the script's input so the status came back blank, the TV's fonts missing a symbol the app drew, LG-USB-2-ETH0's new phone block looking like a gap until the TV's next start, and the status claiming FW Block was adding blocks while it was off.  The research behind the blocks came from running LG's own updater in a sandbox and reading nine firmwares (see [How we checked](#how-we-checked)), building on LG-USB-2-ETH0's `--block-updates` and the findings in Homebrew Channel issue #96 and PR #264.  The [changelog](CHANGELOG.md) has the full story.
+
+- **Tests on every push:** 58 [tests](tests/run.sh) run the script against a fake TV (its own `/etc/hosts`, settings service, firewall, phone gateway and update folders) under busybox `sh` (the TV's shell), dash and bash, along with ShellCheck, a translation check, the release signing checks, a build of the TV app and its screens in a browser.  The CI badge above shows the latest run.
+- **Signed releases:** an update only installs if its release is signed with the project's key, which only GitHub Actions uses, from an encrypted secret ([SECURITY.md](SECURITY.md#verifying-a-download)).  The Homebrew Channel checks the download's SHA-256 too.
+- **Hard to break the TV:** no system partition is written, no system service is restarted, a backup is saved before every change, and turning it off or uninstalling undoes everything it added.
+
+Commits list me as the author and Claude as the committer, which is why they show as Verified.  Found a problem?  See [SECURITY.md](SECURITY.md) or open an issue.
+
+</details>
+
 ## Standout features
 
 - **One switch, and it's done.**  **Block firmware updates** turns everything on, now and at every start.  Each part has its own switch with a line on what it does, and the status shows who keeps each block: FW Block, LG-USB-2-ETH0 or the Homebrew Channel.  [The TV app](#the-tv-app)
@@ -190,19 +207,6 @@ Any rooted LG webOS TV with the Homebrew Channel should work: the update path an
 - **Tested on every push:** the script runs against a fake TV (its own `/etc/hosts`, settings service, firewall, phone gateway and update folders) under busybox `sh` (the TV's shell), dash and bash, along with ShellCheck, a translation check, the signing checks, a build of the TV app and its screens in a browser.
 
 It can't undo an update that already installed, and it doesn't block the LG Content Store.  **One thing only you can do:** don't start an LG Remote Support session while the TV is rooted, and until the TV has restarted once with FW Block on, don't accept an update from a phone app.
-
-<details>
-<summary><b>How this is built: AI-assisted, tested against a fake TV and a real one</b></summary>
-
-<br>
-
-I, [OhMyBahGosh](https://github.com/ohmybahgosh), build this with AI coding agents (Claude), directed, reviewed and tested by me.  AI writes a lot of the code here; I decide what it does, check how it does it, and nothing ships until it's run on a real TV (an LG C2 on webOS 25).
-
-The main blocks come from LG-USB-2-ETH0's `--block-updates`, which has run on real TVs since v2.4.7, and from the findings in Homebrew Channel issue #96 and PR #264.  The rest come from running LG's own updater in a sandbox (see [How we checked](#how-we-checked)).
-
-Commits list me as the author and Claude as the committer, which is why they show as Verified.  Found a problem?  See [SECURITY.md](SECURITY.md) or open an issue.
-
-</details>
 
 ## Turning it off and uninstalling
 
