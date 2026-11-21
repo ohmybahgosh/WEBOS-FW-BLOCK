@@ -1206,6 +1206,25 @@ test_alerts() {
     check "only known languages" is "$RC" 1
 }
 
+# Glasshouse's table first in the file (as its bind mount shows it), then
+# a recheck adds lines later, then the app is uninstalled
+test_glasshouse_uninstall() {
+    printf '%s\n0.0.0.0 ads.lge.com\n::\tads.lge.com\n%s\n' "$GH_HEAD" "$HOSTS_STOCK" > "$FB_ROOT/etc/hosts"
+    cp "$FB_ROOT/etc/hosts" "$T/gh"
+    app_install
+    run_app on
+    teardown_watch
+    check "header once" is "$(grep -cxF "$GH_KEPT" "$FB_ROOT/etc/hosts")" 1
+    _kl=$(grep -nxF "$GH_KEPT" "$FB_ROOT/etc/hosts" | cut -d: -f1)
+    check "every line of ours below it" eval "grep -n 'webos-fw-block' '$FB_ROOT/etc/hosts' | cut -d: -f1 | awk -v k=$_kl '\$1 <= k { bad = 1 } END { exit bad }'"
+    check "blocking lines only" eval "! grep 'webos-fw-block\$' '$FB_ROOT/etc/hosts' | grep -v '^#' | grep -qv '^\(0\.0\.0\.0\|::\)	'"
+    check "Glasshouse's table untouched" eval "head -n \$(wc -l < '$T/gh') '$FB_ROOT/etc/hosts' | cmp -s - '$T/gh'"
+    rm -rf "$FB_ROOT$APPD"
+    OUT=$(FB_GONE_WAIT=0 $SH "$FB_ROOT/var/lib/webosbrew/webos-fw-block/fw-block.sh" boot 2>&1)
+    check "uninstalled" has "was uninstalled"
+    check "only ours removed" is "$(grep -v '^$' "$FB_ROOT/etc/hosts" | grep -vxF "$GH_KEPT")" "$(cat "$T/gh")"
+}
+
 for c in fresh on with_hbc_block off off_keeps_switch_that_was_off eth0_owns off_while_eth0_blocks_leaves_switch \
     readonly_hosts check_heals found_update_removed on_removes_found_update hits_counted server_switch_noted \
     luna_down no_iptables redirect_is_not_a_block eth0_leftover_rule others events_json boot boot_when_off boot_eth0 \
@@ -1218,7 +1237,7 @@ for c in fresh on with_hbc_block off off_keeps_switch_that_was_off eth0_owns off
     backups update update_not_uninstall \
     hbc_keeps_check hbc_old_doesnt_keep_check restore_from_backup_respects_hbc eth0_first_original_kept \
     failed_restore_keeps_original uninstall_waits_for_storage uninstall_retries others_lines_untouched backup_records_others restart \
-    glasshouse_hosts no_glasshouse_no_header block_test clean_downloads flags_clear pause alerts; do
+    glasshouse_hosts glasshouse_uninstall no_glasshouse_no_header block_test clean_downloads flags_clear pause alerts; do
     t "$c" "test_$c"
 done
 
