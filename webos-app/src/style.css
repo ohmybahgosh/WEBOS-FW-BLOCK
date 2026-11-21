@@ -236,3 +236,13 @@ footer { bottom: 44px; left: 100px; right: 100px; font-size: 26px; }
 .notes li.sub { margin-left: 30px; list-style: circle; }
 .notes code { font-size: .9em; color: #3ef08f; }
 .notes p.note { color: #febc2e; }
+
+/* Block test results */
+.testres { width: 100%; font-size: 30px; margin: 6px 0 10px; border-collapse: collapse; }
+.testres td { padding: 7px 18px 7px 0; border-bottom: 1px solid rgba(255, 45, 85, .12); }
+.testres td:first-child { width: 44%; color: #d9cbce; }
+.testres td:nth-child(2) { font-family: "DejaVu Sans Mono", monospace; font-size: 26px; }
+.testres .ok { color: #3ef08f; }
+.testres .bad { color: #ff5f6d; }
+.testres .warn { color: #febc2e; }
+.testres .dim { color: #8a7a7e; }

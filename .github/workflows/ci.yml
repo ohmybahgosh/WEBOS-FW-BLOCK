@@ -58,7 +58,7 @@ jobs:
         with:
           node-version: 20
       - name: The JavaScript parses
-        run: for f in webos-app/src/*.js webos-app/gen-manifest.js update.js scripts/release-sign.js tests/*.js tests/fakebin/*.js scripts/screenshots/demo.js; do node --check "$f" || exit 1; done
+        run: for f in webos-app/src/*.js webos-app/gen-manifest.js update.js probe.js scripts/release-sign.js tests/*.js tests/fakebin/*.js scripts/screenshots/demo.js; do node --check "$f" || exit 1; done
       - name: Every text is translated
         run: node tests/check-i18n.js
       - name: Release signatures and the update check's keys

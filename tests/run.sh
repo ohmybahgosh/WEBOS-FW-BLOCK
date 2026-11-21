@@ -1041,6 +1041,171 @@ test_restart() {
     check "no restart call" eval "! grep -q reboot '$FB_ROOT/.luna.log' 2>/dev/null"
 }
 
+GH_HEAD='# LG Ad & Telemetry Blackhole (lg-webos-dashboard)'
+GH_KEPT='# Kept from /etc/hosts, where other tools put them'
+test_glasshouse_hosts() {
+    # Glasshouse's own table is what /etc/hosts shows
+    printf '%s\n%s\n0.0.0.0 ads.lge.com\n0.0.0.0 ngfts.lge.com\n' "$HOSTS_STOCK" "$GH_HEAD" > "$FB_ROOT/etc/hosts"
+    run on
+    check "its header added" is "$(grep -cxF "$GH_KEPT" "$FB_ROOT/etc/hosts")" 1
+    _kl=$(grep -nxF "$GH_KEPT" "$FB_ROOT/etc/hosts" | cut -d: -f1)
+    _fl=$(grep -n "# webos-fw-block\$" "$FB_ROOT/etc/hosts" | head -n 1 | cut -d: -f1)
+    check "our lines under it" test "$_fl" -gt "$_kl"
+    check "Glasshouse's lines kept" in_hosts "0.0.0.0 ads.lge.com"
+    json
+    check "named among the others" eval "field others | grep -q glasshouse"
+    # Glasshouse dropped our lines (no header yet): put back, header once
+    grep -v webos-fw-block "$FB_ROOT/etc/hosts" | grep -vxF "$GH_KEPT" > "$T/h" && cat "$T/h" > "$FB_ROOT/etc/hosts"
+    run check
+    check "header once" is "$(grep -cxF "$GH_KEPT" "$FB_ROOT/etc/hosts")" 1
+    check "lines back" in_hosts "0.0.0.0	nsu.lge.com # webos-fw-block"
+    run off
+    check "ours gone" eval "! grep -q 'webos-fw-block' '$FB_ROOT/etc/hosts'"
+    check "Glasshouse's stay" in_hosts "0.0.0.0 ads.lge.com"
+}
+test_no_glasshouse_no_header() {
+    run on
+    check "no header without Glasshouse" eval "! grep -qF 'Kept from' '$FB_ROOT/etc/hosts'"
+}
+
+probe() { FB_NODE=$(command -v node) FB_PROBE_HOSTS="$FB_ROOT/etc/hosts" FB_PROBE_SIM="$1" run test --json; printf '%s' "$OUT" > "$T/s.json"; }
+tstate() { python3 -c "import json,sys
+r=[x for x in json.load(open(sys.argv[1]))['results'] if x['id']==sys.argv[2]]
+print(r[0]['state']+(' '+r[0]['detail'] if r and r[0]['detail'] else '') if r else 'none')" "$T/s.json" "$1"; }
+test_block_test() {
+    probe 'github.com:443=open'
+    check "valid JSON" valid_json
+    check "check open" is "$(tstate check)" open
+    check "servers open" is "$(tstate servers)" "open snu.lge.com su.lge.com su-ssl.lge.com su-dev.lge.com snu-dev.lge.com nsu.lge.com ngfts.lge.com"
+    run on
+    probe 'github.com:443=open'
+    check "check ok" is "$(tstate check)" ok
+    check "auto ok" is "$(tstate auto)" ok
+    check "servers ok" is "$(tstate servers)" ok
+    check "address ok" is "$(tstate address)" ok
+    check "remote ok" is "$(tstate remote)" ok
+    check "phone waits for a start" is "$(tstate phone)" wait
+    check "guard ok" is "$(tstate guard)" ok
+    check "no files" is "$(tstate files)" ok
+    # The address reachable after all
+    probe 'github.com:443=open,156.147.69.32:8080=open'
+    check "address open" is "$(tstate address)" open
+    # No network at all: can't tell
+    probe ''
+    check "no network: unknown" is "$(tstate address)" "unknown no-network"
+    # A server answering for real
+    probe 'github.com:443=open,su.lge.com=open 1.2.3.4'
+    check "one server open" is "$(tstate servers)" "open su.lge.com"
+    # Without Node.js: read from the settings
+    FB_NODE=/nonexistent run test --json; printf '%s' "$OUT" > "$T/s.json"
+    check "without node: servers from hosts" is "$(tstate servers)" ok
+    check "without node: address from the rule" is "$(tstate address)" "ok rule"
+    run report
+    check "in the report" has "block test (from the settings):"
+}
+
+test_clean_downloads() {
+    mkdir -p "$FB_ROOT/mnt/lg/appstore/.update"
+    printf 'epkdata' > "$FB_ROOT/mnt/lg/appstore/swupdatefile.epk"
+    printf 'usbdata!' > "$FB_ROOT/mnt/lg/cmn_data/usbupdatefile.epk"
+    json
+    check "two listed" is "$(field downloads | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')" 2
+    check "sizes" is "$(field downloads | python3 -c 'import json,sys; print(sum(x["bytes"] for x in json.load(sys.stdin)))')" 15
+    : > "$FB_ROOT/tmp/nsu-running"
+    run clean
+    check "not while an update runs" has "nothing was deleted"
+    check "kept" test -f "$FB_ROOT/mnt/lg/appstore/swupdatefile.epk"
+    rm -f "$FB_ROOT/tmp/nsu-running"
+    run clean
+    check "deleted" has "Deleted 2 firmware files"
+    check "gone" test ! -e "$FB_ROOT/mnt/lg/appstore/swupdatefile.epk"
+    check "listed in a backup" eval "grep -q swupdatefile.epk '$(FBD)'/backups/*/downloads"
+    check "logged" ev "cleaned 2"
+    run clean
+    check "nothing left" has "No downloaded firmware files"
+}
+
+test_flags_clear() {
+    : > "$FB_ROOT/mnt/lg/cmn_data/.forceUpdateFlagFile"
+    : > "$FB_ROOT/mnt/lg/cmn_data/update/.nsuServerTypeNetwork"
+    : > "$FB_ROOT/mnt/lg/cmn_data/update/.nsuServerTypeSDP"
+    json
+    check "listed" is "$(field flagFiles)" '[".forceUpdateFlagFile", ".nsuServerTypeNetwork"]'
+    run flags-clear
+    check "removed" has "Removed 2 LG flag files"
+    check "force gone" test ! -e "$FB_ROOT/mnt/lg/cmn_data/.forceUpdateFlagFile"
+    check "network switch gone" test ! -e "$FB_ROOT/mnt/lg/cmn_data/update/.nsuServerTypeNetwork"
+    check "SDP left alone" test -e "$FB_ROOT/mnt/lg/cmn_data/update/.nsuServerTypeSDP"
+    check "copies in the backup" eval "ls '$(FBD)'/backups/*/lg-flags/.forceUpdateFlagFile >/dev/null"
+    run flags-clear
+    check "none left" has "No LG flag files"
+}
+
+test_pause() {
+    run pause 60
+    check "not when off" has "nothing to pause"
+    run on
+    run pause abc
+    check "minutes checked" is "$RC" 1
+    run pause 2000
+    check "at most a day" is "$RC" 1
+    run pause 60
+    check "paused" has "Paused for 60 minutes"
+    check "update check back on" is "$(switch)" true
+    check "hosts lines gone" eval "! grep -q 'webos-fw-block' '$FB_ROOT/etc/hosts'"
+    json
+    check "until" test "$(field paused)" -gt "$(date +%s)"
+    run check
+    check "the check doesn't block while paused" is "$(switch)" true
+    # The time is up
+    sed -i 's/^PAUSE=.*/PAUSE=1000/' "$(FBD)/settings"
+    run check
+    check "blocked again" is "$(switch)" false
+    check "lines back" in_hosts "0.0.0.0	nsu.lge.com # webos-fw-block"
+    check "logged" ev "pause-end time"
+    check "a notice" grep -q "pause is over" "$FB_ROOT/.luna.log"
+    # Ended early
+    run pause 30
+    run resume
+    check "resume" has "blocked again"
+    check "switch off again" is "$(switch)" false
+    # The next start ends it
+    run pause 30
+    run boot
+    check "boot blocks" is "$(switch)" false
+    check "boot ended it" ev "pause-end boot"
+    run pause 30
+    run on
+    json
+    check "on ends it" is "$(field paused)" 0
+}
+
+test_alerts() {
+    run on
+    : > "$FB_ROOT/.luna.log"
+    echo true > "$FB_ROOT/.switch"
+    run check
+    check "a notice" grep -q "put back a block" "$FB_ROOT/.luna.log"
+    : > "$FB_ROOT/.luna.log"
+    echo true > "$FB_ROOT/.switch"
+    run check
+    check "not again for the same thing" eval "! grep -q createToast '$FB_ROOT/.luna.log'"
+    run alerts off
+    sed -i '/^alert/d' "$(FBD)/stats"
+    : > "$FB_ROOT/.luna.log"
+    echo true > "$FB_ROOT/.switch"
+    run check
+    check "off: none" eval "! grep -q createToast '$FB_ROOT/.luna.log'"
+    run alerts on
+    run lang es
+    sed -i '/^alert/d' "$(FBD)/stats"
+    echo true > "$FB_ROOT/.switch"
+    run check
+    check "in the app's language" grep -q "volvió a poner" "$FB_ROOT/.luna.log"
+    run lang xx
+    check "only known languages" is "$RC" 1
+}
+
 for c in fresh on with_hbc_block off off_keeps_switch_that_was_off eth0_owns off_while_eth0_blocks_leaves_switch \
     readonly_hosts check_heals found_update_removed on_removes_found_update hits_counted server_switch_noted \
     luna_down no_iptables redirect_is_not_a_block eth0_leftover_rule others events_json boot boot_when_off boot_eth0 \
@@ -1052,7 +1217,8 @@ for c in fresh on with_hbc_block off off_keeps_switch_that_was_off eth0_owns off
     eth0_keeps_phone_and_downloads eth0_phone_off_fwblock_takes_it eth0_phone_pending \
     backups update update_not_uninstall \
     hbc_keeps_check hbc_old_doesnt_keep_check restore_from_backup_respects_hbc eth0_first_original_kept \
-    failed_restore_keeps_original uninstall_waits_for_storage uninstall_retries others_lines_untouched backup_records_others restart; do
+    failed_restore_keeps_original uninstall_waits_for_storage uninstall_retries others_lines_untouched backup_records_others restart \
+    glasshouse_hosts no_glasshouse_no_header block_test clean_downloads flags_clear pause alerts; do
     t "$c" "test_$c"
 done
 

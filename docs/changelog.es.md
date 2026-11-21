@@ -2,6 +2,19 @@
 
 Los cambios de WEBOS-FW-BLOCK, en español.  Los títulos de sección quedan en inglés para que coincidan con el [CHANGELOG.md](../CHANGELOG.md) original, que tiene todas las versiones.
 
+## [1.1.0] - 2026-11-20
+
+### Added
+
+- **Probar el bloqueo.**  Un botón nuevo (pestaña Actividad, y `sh fw-block.sh test`) prueba la vía de actualización de LG como lo haría el actualizador: los dos ajustes de actualización, la búsqueda de cada servidor de actualizaciones y de asistencia remota, y una conexión a las direcciones sin nombre, sin enviar nada.  Antes comprueba que hay red, para no confundir la falta de red con un bloqueo.
+- **Limpiar el firmware descargado y los indicadores de LG.**  El firmware que LG descargó antes del bloqueo, y los indicadores de LG que pueden forzar una actualización, activar opciones de depuración o cambiar el servidor de actualizaciones, se listan y se borran cuando lo pides.  Nunca durante una actualización, y solo después de una copia de seguridad.
+- **Pausa para una actualización planeada.**  Para una actualización que quieres, el bloqueo se quita durante 1, 3 o 24 horas y vuelve por sí solo al terminar el tiempo o en el próximo encendido del televisor.
+- **Avisos en el televisor.**  Un aviso corto, en el idioma de la app, cuando FW Block vuelve a poner un bloqueo que algo quitó, o cuando termina su pausa.  Como mucho uno al día por lo mismo, y se pueden desactivar.
+
+### Fixed
+
+- **Funciona con el bloqueador de anuncios de Glasshouse.**  Glasshouse mantiene su propia tabla sobre /etc/hosts y quita las líneas de otras herramientas salvo que estén bajo su encabezado "Kept from /etc/hosts".  Ahora FW Block añade ese encabezado antes de sus líneas, así que ya no se quitan y se vuelven a poner cada 10 minutos.
+
 ## [1.0.0] - 2026-11-20
 
 ### Changed

@@ -2,6 +2,19 @@
 
 All notable changes to WEBOS-FW-BLOCK.  Versions follow [semantic versioning](https://semver.org/).
 
+## [1.1.0] - 2026-11-20
+
+### Added
+
+- **Test the block.**  A new button (Activity tab, and `sh fw-block.sh test`) tries LG's update path the way the updater would: both update settings, a lookup of every update and Remote Support server, and a connection to the addresses with no name, with nothing sent.  It checks the network works first, so no network isn't mistaken for a block.
+- **Clean up downloaded firmware and LG's flag files.**  Firmware LG downloaded before the block, and LG's flag files that can force an update, turn on debug options or switch the update server, are listed and deleted on request.  Never while an update runs, and only after a backup.
+- **Pause for a planned update.**  For an update you want, the block comes off for 1, 3 or 24 hours and goes back on by itself when the time is up or at the next TV start.
+- **Notices on the TV.**  A short notice, in the app's language, when FW Block puts back a block that something undid, or when its pause is over.  At most one a day for the same thing, and they can be turned off.
+
+### Fixed
+
+- **Works with Glasshouse's ad block.**  Glasshouse keeps its own table over /etc/hosts and drops other tools' lines unless they sit under its "Kept from /etc/hosts" header.  FW Block now adds that header before its lines, so they're no longer dropped and put back every 10 minutes.
+
 ## [1.0.0] - 2026-11-20
 
 ### Changed

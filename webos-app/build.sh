@@ -16,7 +16,7 @@ OUT="$HERE/out"
 rm -rf "$DIST" "$OUT"
 mkdir -p "$DIST/assets" "$OUT" "$ROOT/.cache"
 cp -R "$HERE/src/." "$DIST/"
-cp "$ROOT/fw-block.sh" "$ROOT/update.js" "$ROOT/CHANGELOG.md" "$DIST/assets/"
+cp "$ROOT/fw-block.sh" "$ROOT/update.js" "$ROOT/probe.js" "$ROOT/CHANGELOG.md" "$DIST/assets/"
 chmod 755 "$DIST/assets/fw-block.sh"
 cp "$ROOT/LICENSE" "$DIST/LICENSE"
 

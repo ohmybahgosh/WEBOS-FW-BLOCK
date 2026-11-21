@@ -37,7 +37,7 @@ So you can judge it yourself:
 - **Never** changes the Homebrew Channel's settings or files, LG-USB-2-ETH0's settings, lines or rules, another program's firewall chains, or LG's flag files (`.nsuServerType*`, `.forceUpdateFlagFile`, the debug files: only reported).
 - **Its working files** are in `/tmp/webos-fw-block`.  `/tmp` is shared with every program on the TV, so each run makes sure that's a real folder owned by root that nobody else can open, and moves anything else found there out of the way first.
 
-It opens no ports and sends nothing about you or your TV anywhere.  The only network requests it ever makes are the update check and download above, and only when you ask for them.
+It opens no ports and sends nothing about you or your TV anywhere.  The only network requests it ever makes are the update check and download above, and **Test the block** when you choose it: it looks up LG's update servers and opens (then closes right away, sending nothing) a connection to LG's addresses with no name and to github.com, to tell a block from no network.
 
 ## Verifying a download
 

@@ -38,7 +38,7 @@ One firmware update can take root off your LG TV for good, along with everything
 > It checks all of it every 10 minutes and at every start, and puts back anything that was undone.  [What it blocks](#what-it-blocks)
 
 > [!NOTE]
-> **Tested on one TV so far.**  1.0.0 runs on a real LG C2 with webOS 25 and passes its tests against a fake TV under the TV's own shell, but it hasn't met many other TVs yet.  If something looks wrong, please open a [bug report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=bug-report.yml), and a [TV report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=tv-report.yml) helps even when it works.
+> **Tested on one TV so far.**  It runs on a real LG C2 with webOS 25 and passes its tests against a fake TV under the TV's own shell, but it hasn't met many other TVs yet.  If something looks wrong, please open a [bug report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=bug-report.yml), and a [TV report](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/issues/new?template=tv-report.yml) helps even when it works.
 
 <details>
 <summary><b>How this is built: AI-assisted, tested on a real TV</b></summary>
@@ -49,7 +49,7 @@ I, [OhMyBahGosh](https://github.com/ohmybahgosh), build FW Block with AI coding 
 
 The fixes that mattered most came from that real-TV testing, not from the AI: `luna-send` quietly eating the script's input so the status came back blank, the TV's fonts missing a symbol the app drew, LG-USB-2-ETH0's new phone block looking like a gap until the TV's next start, and the status claiming FW Block was adding blocks while it was off.  The research behind the blocks came from running LG's own updater in a sandbox and reading nine firmwares (see [How we checked](#how-we-checked)), building on LG-USB-2-ETH0's `--block-updates` and the findings in Homebrew Channel issue #96 and PR #264.  The [changelog](CHANGELOG.md) has the full story.
 
-- **Tests on every push:** 68 [tests](tests/run.sh) run the script against a fake TV (its own `/etc/hosts`, settings service, firewall, phone gateway and update folders) under busybox `sh` (the TV's shell), dash and bash, along with ShellCheck, a translation check, the release signing checks, a build of the TV app and its screens in a browser.  The CI badge above shows the latest run.
+- **Tests on every push:** 75 [tests](tests/run.sh) run the script against a fake TV (its own `/etc/hosts`, settings service, firewall, phone gateway and update folders) under busybox `sh` (the TV's shell), dash and bash, along with ShellCheck, a translation check, the release signing checks, a build of the TV app and its screens in a browser.  The CI badge above shows the latest run.
 - **Signed releases:** an update only installs if its release is signed with the project's key, which only GitHub Actions uses, from an encrypted secret ([SECURITY.md](SECURITY.md#verifying-a-download)).  The Homebrew Channel checks the download's SHA-256 too.
 - **Hard to break the TV:** no system partition is written, no system service is restarted, a backup is saved before every change, and turning it off or uninstalling undoes everything it added.
 
@@ -135,14 +135,34 @@ Then it **keeps it closed**: every 10 minutes (and at every start) it checks all
 Three tabs, sized for a big screen and the remote, in English, Russian or Spanish:
 
 - **Blocks:** **Block firmware updates** (the main switch), **LG Remote Support**, **Phone apps** and **Stop downloads**, each with a line on what it does.  A tag says why a switch is off: your choice, needs the main switch, or kept by another app.
-- **Activity:** **Check now** (puts back anything undone), **What it caught** (every updater try stopped, update deleted and part put back), and **Every block, and who keeps it**.
-- **More:** **What each block does** (every block explained, one page each), **Updates**, **Backups**, **Help and report** (a short report to paste into an issue), **Language** and **About**.
+- **Activity:** **Check now** (puts back anything undone), **Test the block** (tries every route), **What it caught** (every updater try stopped, update deleted and part put back), **Every block, and who keeps it**, and **Clean up** (downloaded firmware and LG's flag files).
+- **More:** **What each block does** (every block explained, one page each), **Pause for a planned update**, **Notices on the TV**, **Updates**, **Backups**, **Help and report** (a short report to paste into an issue), **Language** and **About**.
 
 Green means blocked, amber means waiting (like the phone block before the next start) or off by your choice, and red means open.
 
 <p><img src="assets/screenshots/tv-layers.png" width="49%" alt="Every block, and who keeps it: the seven parts, each blocked, with LG-USB-2-ETH0 keeping some and FW Block the rest"> <img src="assets/screenshots/tv-caught.png" width="49%" alt="What it caught: the updater stopped, a found update deleted, a server put back"></p>
 
 <p><img src="assets/screenshots/tv-activity.png" width="49%" alt="The Activity tab: Check now, What it caught with 3 updater tries stopped, and Every block, and who keeps it"> <img src="assets/screenshots/tv-confirm.png" width="49%" alt="Turning the block on: what it will do, and that LG-USB-2-ETH0's settings aren't changed"></p>
+
+### Test the block
+
+**Test the block** tries LG's update path the way the updater would, whoever blocks it: it reads both update settings, looks up every update and Remote Support server, and tries to connect to the addresses with no name (nothing is sent, and a connection that opens is closed right away).  It first checks the TV can reach GitHub, so a missing network isn't mistaken for a block.  Each route shows as blocked, open or waiting for the next start.  It only connects when you choose it; **Help and report** has a version read from the settings alone.
+
+### Clean up
+
+Firmware LG downloaded before the block (often over a gigabyte) can stay on the TV.  **Clean up** lists those files, and LG's flag files that can force an update, turn on its debug options or switch the update server.  It deletes either on request: never while an update runs, and only after a backup that lists the firmware files and keeps copies of the flag files.  The blocks work with or without them.
+
+### Pause for a planned update
+
+For an update you want (one you know keeps root), **Pause for a planned update** takes FW Block's blocks off for 1, 3 or 24 hours and puts them back by itself when the time is up or at the next TV start, whichever comes first.  A backup is saved first, and the app reminds you if LG-USB-2-ETH0 or the Homebrew Channel still block updates too.
+
+### Notices on the TV
+
+When something undoes a block and FW Block puts it back, or it stops a download, the TV shows a short notice, in the app's language.  The same thing never gets more than one notice a day.  Turn them off under **Notices on the TV**.
+
+<p><img src="assets/screenshots/tv-test.png" width="49%" alt="Test the block: every route tried, each blocked, tried like the updater with nothing sent"> <img src="assets/screenshots/tv-cleanup.png" width="49%" alt="Clean up: delete downloaded firmware, or remove LG's flag files"></p>
+
+<p><img src="assets/screenshots/tv-pause.png" width="49%" alt="Pause the block for 3 hours: what it does, the root warning, and that the Homebrew Channel's block is still on"> <img src="assets/screenshots/tv-paused.png" width="49%" alt="Paused until a set time: the update check is back on until then, and the block comes back by itself"></p>
 
 ### Backups
 
@@ -152,7 +172,7 @@ Before FW Block turns the block on, restores a backup or installs an update, it 
 
 Each time it opens, the app asks GitHub for a newer release, and **Updates** in the More tab says whether there is one.  Choose it to see what's new, then OK: the Homebrew Channel downloads and installs it, and the app opens again by itself to show what changed.  The block stays on the whole time.
 
-Only a release signed with the project's release key (or its backup key, in case the main one is ever lost) is accepted, only from this project's own release address, and the Homebrew Channel checks the download's SHA-256 before it installs.  That check is the only network request FW Block ever makes, and only when the app is open.  [SECURITY.md](SECURITY.md#verifying-a-download) has the keys.
+Only a release signed with the project's release key (or its backup key, in case the main one is ever lost) is accepted, only from this project's own release address, and the Homebrew Channel checks the download's SHA-256 before it installs.  That check, and **Test the block** when you choose it, are the only network requests FW Block makes, and only when the app is open.  [SECURITY.md](SECURITY.md#verifying-a-download) has the keys.
 
 <p><img src="assets/screenshots/tv-explain.png" width="49%" alt="What each block does: the update check, found updates, update servers, the address with no name, Remote Support, phone apps and stop downloads, one page each"> <img src="assets/screenshots/tv-restart.png" width="49%" alt="After turning the block on: everything else is blocked, and phone apps from the next start, with an offer to restart the TV now"></p>
 
@@ -173,6 +193,7 @@ Only a release signed with the project's release key (or its backup key, in case
 
 - **They never fight.**  FW Block adds only what nothing else blocks, and reads the others' settings to know.  The status and **Every block, and who keeps it** name who keeps each part.
 - **Turning one off never turns the other's off.**  Turn LG-USB-2-ETH0's block off and FW Block takes over within 10 minutes.  Turn FW Block off and LG-USB-2-ETH0's block, and the Homebrew Channel's, stay exactly as they were.  The app says so before you confirm.
+- **Glasshouse's ad block** keeps its own table over `/etc/hosts` and drops lines it didn't write unless they sit under its "Kept from /etc/hosts" header.  FW Block adds that header (once) before its own lines, so they stay through Glasshouse's rewrites.
 - **Other blockers** (APL Launcher's hosts lines, `webos_lockout`'s and `lg-tv-blocklist`'s firewall chains) are recognized and left alone.
 
 <p><img src="assets/screenshots/tv-eth0-all.png" width="49%" alt="FW Block with LG-USB-2-ETH0 keeping every block: blocked by LG-USB-2-ETH0, every row green, and the Remote Support and Phone apps switches tagged Kept by LG-USB-2-ETH0"> <img src="assets/screenshots/tv-eth0.png" width="49%" alt="FW Block adding what an older LG-USB-2-ETH0 lacks"></p>
@@ -238,6 +259,11 @@ sh fw-block.sh backups         # the backups it made; backup makes one, restore 
 sh fw-block.sh update-check    # a newer release?  update-install gets it
 sh fw-block.sh changes         # what changed in this version
 sh fw-block.sh restart         # restart the TV now (refused during an update)
+sh fw-block.sh test            # try every route the way the updater would (--json too)
+sh fw-block.sh clean           # delete downloaded firmware files (after a backup)
+sh fw-block.sh flags-clear     # remove LG's force, debug and server-switch flag files (after a backup)
+sh fw-block.sh pause 60        # let updates through for 60 minutes (or until the next start); resume ends it
+sh fw-block.sh alerts off      # no notices on the TV (alerts on to bring them back)
 sh fw-block.sh report          # a short report for asking for help
 ```
 

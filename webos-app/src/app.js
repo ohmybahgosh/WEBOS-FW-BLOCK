@@ -101,7 +101,12 @@
         if (s.guardBy !== 'eth0') { m.push(T('downloads')); }
         return m;
     }
+    function clock(t) { var d = new Date(t * 1000); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
     function headline(s) {
+        if (s.on && s.paused) {
+            return { dot: 'warn', text: T('Paused until {time}', { time: clock(s.paused) }),
+                sub: T('FW Block lets a firmware update through until then, or until the next TV start, and then blocks again by itself.') + (s.eth0 && s.eth0.blocking ? '  ' + T('LG-USB-2-ETH0 still blocks updates.') : '') };
+        }
         if (s.owner === 'eth0') {
             var miss = eth0Missing(s), all = s.level === 'full' && (s.on || !miss.length);
             return { dot: all ? 'ok' : 'warn', text: T('Blocked by LG-USB-2-ETH0'), lit: all,
@@ -191,7 +196,8 @@
         if (s.on && !s.hook) { note(T('The startup hook is missing, so the block won\'t come back after a restart.  Turn the block off and on again.')); }
         if (s.serverSwitch === 'Network') { note(T('webOS was switched to its "network" update server, which is an address with no name.  The firewall rule is what stops it, so keep FW Block on.'), true); }
         else if (s.serverSwitch) { note(T('webOS was switched to another update server ({name}).  The update check stays off, so it still can\'t update.', { name: s.serverSwitch }), true); }
-        if ((s.lgFlags || []).indexOf('force') >= 0) { note(T('LG left a forced-update flag on this TV.  FW Block leaves LG\'s files alone, and the blocks still stop it.'), true); }
+        if ((s.lgFlags || []).indexOf('force') >= 0) { note(T('LG left a forced-update flag on this TV.  The blocks still stop it, and Clean up can remove it.'), true); }
+        if ((s.downloads || []).length) { note(T('Firmware files LG downloaded earlier are on this TV ({mb} MB).  Clean up can delete them.', { mb: dlMB(s) }), true); }
         if ((s.lgFlags || []).indexOf('debug') >= 0) { note(T('LG debug files that redirect the updater are on this TV.  A retail TV ignores them, and the blocks still apply.'), true); }
         if (s.updaterBusy && s.on) { note(T('webOS\'s updater is busy right now.  FW Block stops any download within 30 seconds.'), true); }
         if ((s.others || []).indexOf('eth0-leftover') >= 0) { note(T('LG-USB-2-ETH0 left update-block lines behind.  They\'re harmless, and turning its --block-updates off removes them.'), true); }
@@ -202,6 +208,13 @@
         $('meta').innerHTML = esc('v' + s.version) + (s.webos ? '<br>' + esc('webOS ' + s.webos) : '') + (s.firmware ? esc('  ·  ' + T('firmware {fw}', { fw: s.firmware })) : '');
         renderToggles(s);
         $('check-hint').textContent = s.on ? T('puts back anything that was undone') : T('shows what\'s open');
+        var nf = (s.downloads || []).length, nl = (s.flagFiles || []).length;
+        $('cleanup-hint').textContent = nf || nl ? T('firmware files: {files}, LG flag files: {flags}', { files: nf, flags: nl }) : T('downloaded firmware files and LG\'s flag files: none found');
+        $('pause-hint').textContent = s.paused ? T('paused until {time}: choose to block again now', { time: clock(s.paused) }) : T('lets one update through, then blocks again by itself');
+        tog('alerts', s.alerts);
+        $('alerts-hint').textContent = s.alerts ? T('a notice when a block was undone and put back, or a download stopped') : T('off: what happens is only in the app');
+        // The TV notices in the app's language
+        if (I18N && s.lang !== I18N.lang && !langSent) { langSent = true; runScript('lang ' + I18N.lang, function () {}); }
         $('events-hint').textContent = s.stats.tries ? T('{n} updater tries stopped', { n: s.stats.tries }) : T('tries stopped, fixes made');
         fitRows();
         focusCurrent();
@@ -219,7 +232,9 @@
     function renderToggles(s) {
         var e0 = s.eth0 && s.eth0.blocking;
         tog('main', s.on);
-        if (s.on) {
+        if (s.on && s.paused) {
+            hint('main', T('blocks again at {time}, or at the next TV start', { time: clock(s.paused) }), T('Paused'), 'amber');
+        } else if (s.on) {
             hint('main', e0 ? T('adds what LG-USB-2-ETH0 doesn\'t cover, and takes over if its block is turned off') : T('now and at every start, checked every 10 minutes'));
         } else {
             var miss = e0 ? eth0Missing(s) : [];
@@ -262,6 +277,9 @@
         else if (!s.guard) { hint('guard', T('a download that starts anyway isn\'t stopped'), T('Off by your choice'), 'amber'); }
         else { hint('guard', T('a download that starts anyway is stopped within 30 seconds')); }
     }
+
+    var langSent = false;
+    function dlMB(s) { return Math.max(1, Math.round((s.downloads || []).reduce(function (a, d) { return a + d.bytes; }, 0) / 1048576)); }
 
     function noRoot(err) {
         $('dot').className = 'dot dot-bad';
@@ -355,6 +373,32 @@
 
     // ------------------------------------------------------------------ actions
 
+    // The block test's results: one line per route
+    function testBody(r) {
+        var names = { check: T('webOS\'s update check'), auto: T('Automatic update'), found: T('Found update'), servers: T('Update servers'),
+            address: T('Fallback address'), remote: T('LG Remote Support'), phone: T('Phone apps'), guard: T('Download watch'),
+            files: T('Downloaded firmware'), flags: T('LG flag files'), paused: T('Paused') };
+        var good = 0, bad = 0;
+        var rows = r.results.map(function (x) {
+            var st, cls;
+            switch (x.state) {
+                case 'ok': st = T('blocked'); cls = 'ok'; good++; break;
+                case 'open': st = T('open'); cls = 'bad'; bad++; break;
+                case 'wait': st = T('blocked from the next TV start'); cls = 'warn'; break;
+                case 'off': st = T('not blocked (turned off)'); cls = 'warn'; break;
+                case 'none': st = T('not on this TV'); cls = 'dim'; break;
+                case 'found': st = x.id === 'paused' ? T('until {time}', { time: clock(+x.detail) }) : T('{n} found', { n: x.detail }); cls = 'warn'; break;
+                default: st = x.detail === 'no-network' ? T('can\'t tell: no network') : T('can\'t tell'); cls = 'warn';
+            }
+            if (x.id === 'files' || x.id === 'flags') { if (x.state === 'ok') { st = T('none'); } }
+            if (x.state === 'open' && x.id === 'servers' && x.detail) { st += ': ' + x.detail; }
+            return '<tr><td>' + esc(names[x.id] || x.id) + '</td><td class="' + cls + '">' + esc(st) + '</td></tr>';
+        }).join('');
+        var head = bad ? '<span class="bad">' + esc(T('{n} open: LG can still reach this TV that way.', { n: bad })) + '</span>'
+            : '<span class="ok">' + esc(T('Every route tried is blocked.')) + '</span>';
+        return p(head) + '<table class="testres">' + rows + '</table>'
+            + p('<span class="dim">' + esc(r.probe ? T('Tried like the updater: each server looked up, and the address with no name connected to, with nothing sent.') : T('Read from the settings: Node.js isn\'t on this TV to try the connections.')) + '</span>');
+    }
     function layersBody(s) {
         function ok(good, text) {
             return good ? '<span class="ok">' + esc(text) + '</span>' : '<span class="bad">' + esc(T('open')) + '</span>';
@@ -412,6 +456,11 @@
             case 'backup': return T('Saved a backup');
             case 'restored': return T('Restored the backup from {name}', { name: e.detail });
             case 'updated': return T('Updated FW Block to v{v}', { v: e.detail });
+            case 'paused': return T('Paused for a planned update ({n} minutes)', { n: e.detail });
+            case 'pause-end': return e.detail === 'boot' ? T('Pause ended: the TV started') : (e.detail === 'now' ? T('Pause ended early') : T('Pause over: blocked again'));
+            case 'cleaned': return T('Deleted {n} downloaded firmware files', { n: e.detail });
+            case 'leftover': return T('Found {n} downloaded firmware files', { n: e.detail });
+            case 'flags-cleared': return T('Removed {n} LG flag files', { n: e.detail });
             case 'server': return T('webOS switched to another update server ({name})', { name: e.detail });
             default: return e.kind + (e.detail ? ' ' + e.detail : '');
         }
@@ -749,6 +798,65 @@
                 var h = headline(s);
                 message(h.text, p(esc(h.sub)) + layersBody(s));
             });
+        },
+        test: function () {
+            busy = true;
+            working(T('Test the block'));
+            runScript('test --json', function (ok, out) {
+                busy = false;
+                var r = ok ? parse(out) : null;
+                if (!r || !r.results) { message(T('Test the block'), pre(out || '')); return; }
+                message(T('Test the block'), testBody(r));
+            });
+        },
+        cleanup: function () {
+            var s = state || {}, items = [], nf = (s.downloads || []).length, nl = (s.flagFiles || []).length;
+            if (!nf && !nl) {
+                message(T('Clean up'), p(esc(T('Nothing to clean up: no downloaded firmware files and no LG flag files on this TV.'))));
+                return;
+            }
+            if (nf) {
+                items.push({ label: T('Delete downloaded firmware ({mb} MB)', { mb: dlMB(s) }), sub: T('files LG\'s updater downloaded or a USB update left behind'), fn: function () {
+                    confirm(T('Delete downloaded firmware?'),
+                        p(esc(T('These firmware files are deleted: {files}.  A backup listing them is saved first.  Nothing is deleted while an update runs.', { files: s.downloads.map(function (d) { return d.path.replace(/.*\//, ''); }).join(', ') }))),
+                        function () { act(T('Clean up'), 'clean'); });
+                } });
+            }
+            if (nl) {
+                items.push({ label: T('Remove LG\'s flag files ({n})', { n: nl }), sub: (s.flagFiles || []).join(', '), fn: function () {
+                    confirm(T('Remove LG\'s flag files?'),
+                        p(esc(T('These files can force an update, turn on LG\'s debug options or switch the update server.  They\'re copied into a backup first, then removed.  FW Block blocks updates with or without them.')))
+                        + p(esc((s.flagFiles || []).join(', '))),
+                        function () { act(T('Clean up'), 'flags-clear'); });
+                } });
+            }
+            pick(T('Clean up'), '', items);
+        },
+        pause: function () {
+            var s = state || {};
+            if (s.paused) {
+                confirm(T('Block again now?'), p(esc(T('This ends the pause: every block goes back on right away.'))),
+                    function () { act(T('Pause for a planned update'), 'resume'); });
+                return;
+            }
+            if (!s.on) { needsMain(); return; }
+            function go(min, label) {
+                confirm(T('Pause the block for {time}?', { time: label }),
+                    p(esc(T('FW Block takes its blocks off, so LG can update this TV, and puts them back by itself after {time} or at the next TV start, whichever comes first.  A backup is saved first.', { time: label })))
+                    + p('<span class="bad">' + esc(T('A firmware update can take root away for good.  Only do this for an update you know keeps root.')) + '</span>')
+                    + (s.eth0 && s.eth0.blocking ? p(esc(T('LG-USB-2-ETH0 still blocks updates: turn its block off too for the update.'))) : '')
+                    + (s.hbcBlock ? p(esc(T('The Homebrew Channel\'s own Block system updates is still on: turn it off too for the update.'))) : ''),
+                    function () { act(T('Pause for a planned update'), 'pause ' + min); });
+            }
+            pick(T('Pause for a planned update'), p(esc(T('For an update you want, such as one you know keeps root.  The block comes back by itself.'))), [
+                { label: T('1 hour'), fn: function () { go(60, T('1 hour')); } },
+                { label: T('3 hours'), fn: function () { go(180, T('3 hours')); } },
+                { label: T('24 hours'), fn: function () { go(1440, T('24 hours')); } }
+            ]);
+        },
+        alerts: function () {
+            var s = state || {};
+            act(T('Notices on the TV'), 'alerts ' + (s.alerts ? 'off' : 'on'), function () { focusCurrent(); });
         },
         layers: function () {
             if (!state) { return; }

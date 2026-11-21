@@ -76,7 +76,7 @@
 #
 # Paths can be moved under FB_ROOT for the tests.
 
-VERSION="1.0.0"
+VERSION="1.1.0"
 R="${FB_ROOT:-}"
 HERE=$(cd "$(dirname "$0")" && pwd)
 SELF="$HERE/fw-block.sh"
@@ -169,6 +169,18 @@ SSG_COPY="$RUN/update.interface"
 # "boot" when the copy went in at start (before the gateway reads it), or
 # "now" when it went in later and holds from the next start
 SSG_MARK="$RUN/phone"
+# Glasshouse's ad block keeps its own hosts table over /etc/hosts, and only
+# keeps other tools' lines that sit under this header of its own
+GH_MARK='LG Ad & Telemetry Blackhole'
+GH_KEPT='# Kept from /etc/hosts, where other tools put them'
+APPSTORE="$R/mnt/lg/appstore"
+# Firmware files LG's updater downloads (swupdatefile) or copies from USB
+DL_FILES="$APPSTORE/swupdatefile.epk $CMN/swupdatefile.epk $APPSTORE/.update/usbupdatefile.epk $CMN/usbupdatefile.epk"
+# LG's flag files that can force or redirect an update: the force and debug
+# flags, and the switches to the Network and Test servers
+FLAG_FILES="$CMN/.forceUpdateFlagFile $CMN/debugVersionCheck $CMN/debugDownload $CMN/.UpdateDebug $CMN/update/.nsuServerTypeNetwork $CMN/update/.nsuServerTypeTest"
+PAUSE_MAX=1440
+PROBE="$HERE/probe.js"
 
 say() { printf '%s\n' "$*"; }
 die() { say "$*" >&2; exit 1; }
@@ -257,6 +269,21 @@ toast() {
     luna -n 1 luna://com.webos.notification/createToast \
         "{\"sourceId\":\"$APP_ID\",\"message\":\"$1\"}" >/dev/null 2>&1
 }
+# The TV notices in the app's language (lang sets it)
+msg() {
+    case "$(conf_get LANG)-$1" in
+        es-download) printf '%s\n' "FW Block detuvo una descarga de firmware." ;;
+        ru-download) printf '%s\n' "FW Block остановил загрузку прошивки." ;;
+        *-download) printf '%s\n' "FW Block stopped a firmware download." ;;
+        es-fixed) printf '%s\n' "FW Block volvió a poner un bloqueo que algo había quitado." ;;
+        ru-fixed) printf '%s\n' "FW Block вернул блокировку, которую что-то сняло." ;;
+        *-fixed) printf '%s\n' "FW Block put back a block that something undid." ;;
+        es-pause-end) printf '%s\n' "Terminó la pausa de FW Block: las actualizaciones de firmware vuelven a estar bloqueadas." ;;
+        ru-pause-end) printf '%s\n' "Пауза FW Block закончилась: обновления прошивки снова заблокированы." ;;
+        *-pause-end) printf '%s\n' "FW Block's pause is over: firmware updates are blocked again." ;;
+    esac
+}
+alerts_on() { [ "$(conf_get ALERTS)" != 0 ]; }
 
 # ------------------------------------------------------------- other blockers
 
@@ -326,6 +353,7 @@ others() {
     eth0_blocking && _o="$_o eth0"
     grep -q "$ETH0_TAG" "$HOSTS" 2>/dev/null && ! eth0_blocking && _o="$_o eth0-leftover"
     grep -q 'APL Launcher' "$HOSTS" 2>/dev/null && _o="$_o apl-launcher"
+    glasshouse && _o="$_o glasshouse"
     _rules=$(fw_rules)
     case "$_rules" in *LG_LOCKOUT*) _o="$_o webos-lockout" ;; esac
     case "$_rules" in *LGTVBLK*) _o="$_o lg-tv-blocklist" ;; esac
@@ -397,6 +425,7 @@ hosts_missing() {
     _hl=${1:-$UPD_HOSTS}
     if [ -r "$HOSTS" ]; then hosts_scan "$_hl" missing; else echo "$_hl"; fi
 }
+glasshouse() { grep -q "$GH_MARK" "$HOSTS" 2>/dev/null; }
 hosts_blocked() { hosts_scan "${1:-$UPD_HOSTS}" blocked; }
 # How many update servers this added (one line each for IPv4 and IPv6)
 hosts_ours() { grep "^0\.0\.0\.0.*$TAG\$" "$HOSTS" 2>/dev/null | grep -cv "$RTAG"; }
@@ -427,7 +456,12 @@ hosts_add() {
     if ! hosts_make_writable; then say "Could not add the $3 to /etc/hosts."; return 1; fi
     _hd=''
     grep -q "^$2\$" "$HOSTS" 2>/dev/null || _hd=1
+    # Under Glasshouse's table: its header first (once), or it drops these
+    # lines the next time it rewrites its table
+    _kh=''
+    if glasshouse && ! grep -qxF "$GH_KEPT" "$HOSTS" 2>/dev/null; then _kh=1; _hd=1; fi
     {
+        [ -n "$_kh" ] && printf '\n%s\n' "$GH_KEPT"
         [ -n "$_hd" ] && echo "$2"
         for _h in $_miss; do printf '0.0.0.0\t%s %s\n::\t%s %s\n' "$_h" "$2" "$_h" "$2"; done
     } >> "$HOSTS"
@@ -543,6 +577,28 @@ lg_flags() {
     echo "${_f# }"
 }
 
+# Firmware files left on the TV, one path per line
+downloads() { for _df in $DL_FILES; do [ -f "$_df" ] && printf '%s\n' "$_df"; done; return 0; }
+fsize() { stat -c %s "$1" 2>/dev/null; }
+downloads_json() {
+    printf '['
+    _dn=''
+    for _df in $(downloads); do
+        _du=false; case "$_df" in *usbupdatefile*) _du=true ;; esac
+        printf '%s{"path":%s,"bytes":%s,"usb":%s}' "$_dn" "$(js "$_df")" "$(jn "$(fsize "$_df")")" "$_du"
+        _dn=,
+    done
+    printf ']'
+}
+flag_files() { for _ff in $FLAG_FILES; do [ -e "$_ff" ] && printf '%s\n' "$_ff"; done; return 0; }
+
+# A planned update: the block is off until PAUSE (a time), or the next start
+paused() {
+    _pu=$(conf_get PAUSE)
+    case "$_pu" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$_pu" -gt 0 ]
+}
+
 # The updater's status (idle, check update, downloading, installing...).
 # Only asked while one of its working files says it's busy, so the updater
 # isn't woken up for nothing.
@@ -566,7 +622,7 @@ guard() {
             event cancelled "$_st"
             stat_inc cancelled
             stat_set lastCancel "$(now)"
-            toast "FW Block stopped a firmware download."
+            alerts_on && toast "$(msg download)"
             say "$(date): stopped a firmware download ($_st)."
             ;;
         install*)
@@ -819,6 +875,8 @@ count_hits() {
 tick() {
     secure_run
     now > "$LAST"
+    # Paused for a planned update: nothing is put back until it's over
+    if paused; then pause_due; return 0; fi
     # After an app update, the copy the hook falls back on gets the new script
     _ac="$APP_DIR/assets/fw-block.sh"
     if [ -f "$_ac" ] && [ -f "$DATA/fw-block.sh" ] && ! [ "$_ac" -ef "$DATA/fw-block.sh" ] && ! cmp -s "$_ac" "$DATA/fw-block.sh"; then
@@ -837,12 +895,22 @@ tick() {
             event fixed "$(echo "$_u" | tr ' ' ,)"
             stat_set fixed "$(now)"
             stat_set fixedWhat "$(echo "$_u" | tr ' ' ,)"
+            # A notice on the TV, but not every 10 minutes for the same thing
+            if alerts_on && { [ "$_u" != "$(stat_get alertWhat)" ] || [ $(($(now) - $(jn "$(stat_get alertAt)"))) -ge 86400 ]; }; then
+                toast "$(msg fixed)"
+                stat_set alertWhat "$_u"; stat_set alertAt "$(now)"
+            fi
         fi
         block >/dev/null
     fi
     # Only noted, not changed: LG's own files, and other parts may read them
     _sw=$(server_switch)
     if [ -n "$_sw" ] && [ "$_sw" != "$(stat_get server)" ]; then event server "$_sw"; stat_set server "$_sw"; fi
+    _dl=$(downloads | wc -l | tr -d ' ')
+    if [ "$_dl" != "$(jn "$(stat_get leftover)")" ]; then
+        [ "$_dl" -gt 0 ] && event leftover "$_dl"
+        stat_set leftover "$_dl"
+    fi
     _lf=$(lg_flags)
     if [ -n "$_lf" ] && [ "$_lf" != "$(stat_get flags)" ]; then event flags "$(echo "$_lf" | tr ' ' ,)"; stat_set flags "$_lf"; fi
     eth0_blocking || count_hits "$HITS" tries stopped "$UPD_IP"
@@ -862,8 +930,12 @@ watch() {
     while setting_on && [ "$(cat "$PIDF" 2>/dev/null)" = $$ ]; do
         # Only stops once the clean-up worked; otherwise it tries again
         if app_gone; then uninstalled && return 0; fi
-        guard_on && ! eth0_guard && guard
-        if [ "$_next" -le 0 ]; then tick; _next=$EVERY; fi
+        if paused; then
+            pause_due
+        else
+            guard_on && ! eth0_guard && guard
+            if [ "$_next" -le 0 ]; then tick; _next=$EVERY; fi
+        fi
         sleep "$QUICK"
         _next=$((_next - QUICK))
     done
@@ -875,6 +947,8 @@ boot() {
     setting_on || return 0
     if app_gone; then uninstalled; return 0; fi
     secure_run
+    # A pause lasts until the next start at most (the clock may not be set yet)
+    if paused; then conf_set PAUSE 0; event pause-end boot; fi
     event boot
     if eth0_blocking; then
         say "$(date): LG-USB-2-ETH0 blocks updates, so this adds only what it lacks."
@@ -889,6 +963,7 @@ boot() {
 cmd_on() {
     backup_make on >/dev/null
     conf_set BLOCK 1
+    paused && conf_set PAUSE 0
     # Turned on from the app's own copy: an uninstall later undoes it
     case "$SELF" in "$APP_DIR"/*) conf_set APP 1 ;; esac
     [ -n "$(conf_get REMOTE)" ] || conf_set REMOTE 1
@@ -910,6 +985,7 @@ cmd_on() {
 
 cmd_off() {
     conf_set BLOCK 0
+    paused && conf_set PAUSE 0
     watch_stop
     remove_hook
     # A part that couldn't be undone keeps what's needed to try again:
@@ -1043,6 +1119,8 @@ status_json() {
         "$(jn "$(stat_get tries)")" "$(jn "$(stat_get last)")" "$(jn "$(stat_get found)")" "$(jn "$(stat_get fixed)")" "$(js "$(stat_get fixedWhat)")" \
         "$(jn "$(stat_get remote)")" "$(jn "$(stat_get cancelled)")" "$(jn "$(stat_get lastCancel)")"
     printf '"lastCheck":%s,"every":%s,"now":%s,' "$(jn "$(cat "$LAST" 2>/dev/null)")" "$(jn "$EVERY")" "$(now)"
+    printf '"paused":%s,"alerts":%s,"lang":%s,"downloads":%s,"flagFiles":%s,' "$(jn "$(paused && conf_get PAUSE)")" "$(jb "$(alerts_on && echo 1)")" \
+        "$(js "$(conf_get LANG)")" "$(downloads_json)" "$(ja "$(flag_files | sed 's|.*/||' | tr '\n' ' ')")"
     printf '"firmware":%s,"webos":%s' "$(js "$(firmware)")" "$(js "$(webos)")"
     printf '}\n'
 }
@@ -1097,6 +1175,8 @@ status_text() {
         ?*) say "  update server:  switched to $_sv (still blocked by name)" ;;
     esac
     _lf=$(lg_flags); [ -n "$_lf" ] && say "  LG flag files:  $_lf"
+    paused && say "  PAUSED until $(date -d "@$(conf_get PAUSE)" '+%Y-%m-%d %H:%M' 2>/dev/null || conf_get PAUSE), for a planned update"
+    _dc=$(downloads | wc -l | tr -d ' '); [ "$_dc" != 0 ] && say "  downloaded firmware files: $_dc"
     say "  Homebrew Channel's block: $(hbc_blocking && echo on || echo off)"
     _t=$(stat_get tries); [ -n "$_t" ] && say "  updater tries stopped: $_t"
     _c=$(stat_get cancelled); [ -n "$_c" ] && say "  downloads cancelled: $_c"
@@ -1117,6 +1197,8 @@ report() {
     say "setting: $(setting_on && echo on || echo off), remote support block: $(remote_on && echo on || echo off), hook: $([ -f "$HOOK" ] && echo yes || echo no), check running: $(watch_pid >/dev/null && echo yes || echo no)"
     say "others: $(others)"
     say "iptables: $(have_ipt && echo yes || echo no)"
+    say "block test (from the settings):"
+    cmd_test offline | sed 1d
     say "last events:"
     tail -n 10 "$EVENTS" 2>/dev/null | while read -r _t _k _d; do say "  $(date -d "@$_t" '+%Y-%m-%d %H:%M' 2>/dev/null || echo "$_t") $_k $_d"; done
 }
@@ -1154,6 +1236,7 @@ backup_make() {
         echo "savedCheck=$(cat "$ORIG" 2>/dev/null)"
         echo "savedAuto=$(cat "$AUTO_ORIG" 2>/dev/null)"
     } > "$_bd/info"
+    BK_LAST="$_bd"
     [ -f "$JOURNAL" ] && cp "$JOURNAL" "$_bd/originals.log"
     [ -f "$ETH0_CONF" ] && cp "$ETH0_CONF" "$_bd/lg-usb-2-eth0.conf"
     [ -f "$CONF" ] && cp "$CONF" "$_bd/settings"
@@ -1213,6 +1296,7 @@ cmd_restore() {
     backup_valid "$1" || die "No backup called '$1'.  See: sh fw-block.sh backups"
     _rb="$BACKUPS/$1"
     backup_make restore >/dev/null
+    paused && conf_set PAUSE 0
     _wb=$(binfo "$1" block)
     # FW Block's own switches as they were, then on or off to match
     if [ -f "$_rb/settings" ]; then
@@ -1377,6 +1461,190 @@ changes() {
 # Restarting the TV in the middle of an update could break it: refused while
 # the updater says it's busy or an update is installing.  Everything is
 # written to storage first.  The call is the Homebrew Channel's own.
+# ------------------------------------------------------------- clean-up, pause, test
+
+# Firmware files already downloaded: deleted, after a backup that lists them.
+# Never while an update runs (a USB update reads its file while installing).
+cmd_clean() {
+    _cl=$(downloads)
+    if [ -z "$_cl" ]; then say "No downloaded firmware files on this TV."; return 0; fi
+    if upd_busy; then say "An update is running right now, so nothing was deleted."; return 1; fi
+    backup_make clean >/dev/null || { say "Could not save a backup first, so nothing was deleted."; return 1; }
+    for _cf in $_cl; do
+        printf '%s %s %s\n' "$_cf" "$(fsize "$_cf")" "$(date -r "$_cf" +%s 2>/dev/null)" >> "$BK_LAST/downloads"
+    done
+    _cn=0 _cb=0
+    for _cf in $_cl; do
+        _cs=$(jn "$(fsize "$_cf")")
+        if rm -f "$_cf" && [ ! -e "$_cf" ]; then _cn=$((_cn + 1)); _cb=$((_cb + _cs)); else say "Could not delete $_cf"; fi
+    done
+    pending && pending_clear
+    event cleaned "$_cn"
+    stat_set leftover "$(downloads | wc -l | tr -d ' ')"
+    say "Deleted $_cn firmware files ($((_cb / 1048576)) MB)."
+}
+
+# LG's force, debug and server-switch flag files: copied into a backup, then
+# removed.  Only on request: they're LG's files.
+cmd_flags_clear() {
+    _fl=$(flag_files)
+    if [ -z "$_fl" ]; then say "No LG flag files on this TV."; return 0; fi
+    if upd_busy; then say "An update is running right now, so nothing was removed."; return 1; fi
+    backup_make flags >/dev/null || { say "Could not save a backup first, so nothing was removed."; return 1; }
+    mkdir -p "$BK_LAST/lg-flags"
+    for _ff in $_fl; do
+        cp -p "$_ff" "$BK_LAST/lg-flags/" 2>/dev/null || { say "Could not copy $_ff into the backup, so nothing was removed."; return 1; }
+    done
+    _fn=0
+    for _ff in $_fl; do rm -f "$_ff" && [ ! -e "$_ff" ] && _fn=$((_fn + 1)); done
+    event flags-cleared "$_fn"
+    stat_set flags ''; stat_set server ''
+    say "Removed $_fn LG flag files.  Copies are in the backup."
+}
+
+# pause MINUTES: the block comes off for a planned update, and goes back on
+# when the time is up or at the next TV start, whichever is first
+cmd_pause() {
+    case "${1:-}" in ''|*[!0-9]*) die "Usage: sh fw-block.sh pause MINUTES (1 to $PAUSE_MAX)" ;; esac
+    { [ "$1" -ge 1 ] && [ "$1" -le "$PAUSE_MAX" ]; } || die "Usage: sh fw-block.sh pause MINUTES (1 to $PAUSE_MAX)"
+    setting_on || { say "FW Block is off: nothing to pause."; return 1; }
+    backup_make pause >/dev/null
+    conf_set PAUSE $(($(now) + $1 * 60)) || return 1
+    unblock || say "Something couldn't be undone (above)."
+    event paused "$1"
+    watch_start
+    say "Paused for $1 minutes: FW Block blocks again then, or at the next TV start."
+    eth0_blocking && say "LG-USB-2-ETH0 still blocks updates: turn its block off too for the update."
+    hbc_blocking && say "The Homebrew Channel's own Block system updates is still on: turn it off too for the update."
+    return 0
+}
+cmd_resume() {
+    paused || { say "FW Block isn't paused."; return 0; }
+    conf_set PAUSE 0
+    event pause-end now
+    block
+    secure_run
+    now > "$LAST"
+    watch_start
+    say "Firmware updates are blocked again."
+}
+# Called by the watch: the time is up (or the clock jumped back past the limit)
+pause_due() {
+    _pu=$(conf_get PAUSE); _pn=$(now)
+    if [ "$_pn" -ge "$_pu" ] || [ $((_pu - _pn)) -gt $((PAUSE_MAX * 60 + 60)) ]; then
+        conf_set PAUSE 0
+        event pause-end time
+        block >/dev/null
+        now > "$LAST"
+        alerts_on && toast "$(msg pause-end)"
+    fi
+    return 0
+}
+
+# test [--json]: tries LG's update path the way the updater would, whoever
+# blocks it: the settings, a lookup of every update server, a connection to
+# the addresses with no name (only when the network works), the phone apps'
+# file, the download watch and leftover files
+t_add() {
+    if [ -n "$TJ" ]; then printf '%s{"id":%s,"state":%s,"detail":%s}' "$TN" "$(js "$1")" "$(js "$2")" "$(js "${3:-}")"; TN=,
+    else printf '  %-16s %s%s\n' "$1" "$2" "${3:+  ($3)}"; fi
+}
+cmd_test() {
+    TJ=''; TN=''; [ "${1:-}" = --json ] && TJ=1
+    # offline: from the settings only, no lookups or connections (the report)
+    _n=''; [ "${1:-}" = offline ] || _n=$(find_node)
+    _look='' _conn=''
+    if [ -n "$_n" ] && [ -f "$PROBE" ]; then
+        # shellcheck disable=SC2086 # one argument per name and address
+        _look=$("$_n" "$PROBE" lookup $UPD_HOSTS $RS_HOSTS 2>/dev/null)
+        _ra=''; for _a in $RS_IPS; do _ra="$_ra $_a:6120"; done
+        # shellcheck disable=SC2086
+        _conn=$("$_n" "$PROBE" connect "$UPD_IP:8080" $_ra 2>/dev/null)
+    fi
+    [ -n "$TJ" ] && printf '{"version":%s,"time":%s,"probe":%s,"results":[' "$(js "$VERSION")" "$(now)" "$(jb "$_look")"
+    [ -z "$TJ" ] && printf 'FW Block %s: block test\n' "$VERSION"
+    # 1, 2: the settings
+    _sw=$(switch_get)
+    case "$_sw" in false) t_add check ok ;; true) t_add check open ;; *) t_add check unknown ;; esac
+    _au=$(auto_get)
+    case "$_au" in off) t_add auto ok ;; on) t_add auto open ;; *) t_add auto unknown ;; esac
+    if pending; then t_add found open; else t_add found ok; fi
+    # 3: each update server, looked up like the updater does (or read from
+    # /etc/hosts, without Node.js)
+    _open=''
+    for _h in $UPD_HOSTS; do
+        if [ -n "$_look" ]; then
+            _r=$(printf '%s\n' "$_look" | sed -n "s/^$_h //p")
+            case "$_r" in sink|fail) ;; *) _open="$_open $_h" ;; esac
+        else
+            [ -n "$(hosts_missing "$_h")" ] && _open="$_open $_h"
+        fi
+    done
+    if [ -z "$_open" ]; then t_add servers ok; else t_add servers open "${_open# }"; fi
+    # 4: the address with no name, only telling when the network itself works
+    _net=$(printf '%s\n' "$_conn" | sed -n 's/^control //p')
+    _ip=$(printf '%s\n' "$_conn" | sed -n "s/^$UPD_IP:8080 //p")
+    if [ -z "$_conn" ]; then
+        if have_ipt && [ -n "$(fw_by)" ]; then t_add address ok rule; elif have_ipt; then t_add address open; else t_add address unknown; fi
+    elif [ "$_net" != open ]; then t_add address unknown no-network
+    elif [ "$_ip" = open ]; then t_add address open
+    else t_add address ok
+    fi
+    # 5: LG Remote Support
+    _ro=''
+    for _h in $RS_HOSTS; do
+        if [ -n "$_look" ]; then
+            _r=$(printf '%s\n' "$_look" | sed -n "s/^$_h //p")
+            case "$_r" in sink|fail) ;; *) _ro="$_ro $_h" ;; esac
+        else
+            [ -n "$(hosts_missing "$_h")" ] && _ro="$_ro $_h"
+        fi
+    done
+    for _a in $RS_IPS; do
+        if [ -n "$_conn" ] && [ "$_net" = open ]; then
+            [ "$(printf '%s\n' "$_conn" | sed -n "s/^$_a:6120 //p")" = open ] && _ro="$_ro $_a"
+        elif ! ip_dropped "$_a"; then _ro="$_ro $_a"
+        fi
+    done
+    if [ -z "$_ro" ]; then t_add remote ok
+    elif ! remote_on && ! eth0_rs; then t_add remote off
+    else t_add remote open "$(echo "$_ro" | wc -w | tr -d ' ')"
+    fi
+    # 6: phone apps
+    if [ ! -f "$SSG_IF" ]; then t_add phone none
+    elif ! phone_open && { ! phone_ours || phone_active; }; then t_add phone ok
+    elif ! phone_open; then t_add phone wait
+    elif eth0_phone; then t_add phone wait
+    elif setting_on && ! phone_on; then t_add phone off
+    else t_add phone open
+    fi
+    # 7: the download watch
+    if eth0_guard; then t_add guard ok eth0
+    elif setting_on && guard_on && ! paused && watch_pid >/dev/null; then t_add guard ok
+    elif setting_on && ! guard_on; then t_add guard off
+    else t_add guard open
+    fi
+    # Leftovers
+    _dc=$(downloads | wc -l | tr -d ' ')
+    if [ "$_dc" = 0 ]; then t_add files ok; else t_add files found "$_dc"; fi
+    _fc=$(flag_files | wc -l | tr -d ' ')
+    if [ "$_fc" = 0 ]; then t_add flags ok; else t_add flags found "$_fc"; fi
+    paused && t_add paused found "$(conf_get PAUSE)"
+    [ -n "$TJ" ] && printf ']}\n'
+    return 0
+}
+
+cmd_alerts() {
+    case "${1:-}" in
+        on) conf_set ALERTS 1 && say "Notices on the TV are on." ;;
+        off) conf_set ALERTS 0 && say "Notices on the TV are off." ;;
+        *) die "Usage: sh fw-block.sh alerts on|off" ;;
+    esac
+}
+cmd_lang() {
+    case "${1:-}" in en|es|ru) conf_set LANG "$1" ;; *) die "Usage: sh fw-block.sh lang en|es|ru" ;; esac
+}
+
 cmd_restart() {
     if [ -e "$IN_PROGRESS" ] || [ -e "$USB_RUNNING" ] || [ -e "$NSU_RUNNING" ]; then
         die "Not restarting: the TV is busy with an update right now.  Try again in a few minutes."
@@ -1406,6 +1674,13 @@ case "${1:-status}" in
     events) if [ "${2:-}" = --json ]; then events_json; else cat "$EVENTS" 2>/dev/null; fi ;;
     report) report ;;
     restart) cmd_restart ;;
+    test) cmd_test "${2:-}" ;;
+    clean) cmd_clean ;;
+    flags-clear) cmd_flags_clear ;;
+    pause) cmd_pause "${2:-}" ;;
+    resume) cmd_resume ;;
+    alerts) cmd_alerts "${2:-}" ;;
+    lang) cmd_lang "${2:-}" ;;
     backup) backup_make manual ;;
     backups) backups_list "${2:-}" ;;
     restore) cmd_restore "${2:-}" ;;
@@ -1417,5 +1692,5 @@ case "${1:-status}" in
     boot) boot ;;
     watch) watch ;;
     version) say "$VERSION" ;;
-    *) die "Usage: sh fw-block.sh status|on|off|remote on|off|phone on|off|guard on|off|check|events|report|restart|backup|backups|restore NAME|update-check|update-install|changes|version" ;;
+    *) die "Usage: sh fw-block.sh status|on|off|remote on|off|phone on|off|guard on|off|check|events|report|restart|test|clean|flags-clear|pause MINUTES|resume|alerts on|off|backup|backups|restore NAME|update-check|update-install|changes|version" ;;
 esac

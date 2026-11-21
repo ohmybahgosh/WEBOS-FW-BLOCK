@@ -15,13 +15,17 @@ SHOTS = [
     ('tv-eth0-off', 'eth0off', []),
     ('tv-eth0-all', 'eth0all', []),
     ('tv-activity', 'blocked', ['ArrowRight']),
-    ('tv-layers', 'eth0', ['ArrowRight', 'ArrowDown', 'ArrowDown', 'Enter']),
-    ('tv-caught', 'blocked', ['ArrowRight', 'ArrowDown', 'Enter']),
+    ('tv-layers', 'eth0', ['ArrowRight', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter']),
+    ('tv-caught', 'blocked', ['ArrowRight', 'ArrowDown', 'ArrowDown', 'Enter']),
     ('tv-confirm', 'eth0', ['Enter']),
     ('tv-more', 'blocked', ['ArrowRight', 'ArrowRight']),
     ('tv-explain', 'blocked', ['ArrowRight', 'ArrowRight', 'Enter']),
     ('tv-restart', 'pending', ['ArrowDown', 'ArrowDown', 'Enter', 'Enter']),
-    ('tv-backups', 'blocked', ['ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowDown', 'Enter', 'ArrowDown']),
+    ('tv-backups', 'blocked', ['ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter', 'ArrowDown']),
+    ('tv-test', 'blocked', ['ArrowRight', 'ArrowDown', 'Enter']),
+    ('tv-cleanup', 'leftovers', ['ArrowRight', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter']),
+    ('tv-pause', 'blocked', ['ArrowRight', 'ArrowRight', 'ArrowDown', 'Enter', 'ArrowDown', 'Enter']),
+    ('tv-paused', 'paused', []),
 ]
 with sync_playwright() as p:
     b = p.chromium.launch()

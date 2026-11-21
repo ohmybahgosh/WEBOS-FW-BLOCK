@@ -20,7 +20,7 @@ tv() {
     : > "$FB_ROOT/var/luna/preferences/webosbrew_block_updates"
     printf '127.0.0.1 snu.lge.com su-dev.lge.com su.lge.com su-ssl.lge.com\n::1 snu.lge.com su-dev.lge.com su.lge.com su-ssl.lge.com\n' >> "$FB_ROOT/etc/hosts"
 }
-sh_() { sh "$ROOT/fw-block.sh" "$@"; }
+sh_() { FB_PROBE_HOSTS="$FB_ROOT/etc/hosts" FB_PROBE_SIM='github.com:443=open' sh "$ROOT/fw-block.sh" "$@"; }
 stopw() { _p=$(cat "$FB_ROOT/tmp/webos-fw-block/watch.pid" 2>/dev/null) && kill "$_p" 2>/dev/null; rm -rf "$T"; }
 q() { node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(0, "utf8")))'; }
 
@@ -53,7 +53,7 @@ q() { node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(0,
     } > "$d/events"
     printf 'tries=3\nlast=%s\nfound=%s\nfixed=%s\nfixedWhat=hosts\n' "$((n - 7200))" "$((n - 86400))" "$((n - 259000))" > "$d/stats"
     echo "$((n - 240))" > "$FB_ROOT/tmp/webos-fw-block/last"
-    printf 'TVS.blocked = { status: %s, events: %s, report: %s, on: %s, off: %s };\n' "$(sh_ status --json | q)" "$(sh_ events --json | q)" "$(sh_ report | q)" \
+    printf 'TVS.blocked = { status: %s, events: %s, report: %s, test: %s, on: %s, off: %s };\n' "$(sh_ status --json | q)" "$(sh_ events --json | q)" "$(sh_ report | q)" "$(sh_ test --json | q)" \
         "$(printf 'Turned webOS'"'"'s update check off.\nBlocked update servers in /etc/hosts: snu-dev.lge.com nsu.lge.com ngfts.lge.com\nBlocked 156.147.69.32, the address the updater falls back to.\nFirmware updates are blocked, now and at every start.\n' | q)" \
         "$(printf 'Turned webOS'"'"'s update check back on.\nThe Homebrew Channel'"'"'s own Block system updates is still on (it covers four servers).\nFW Block is off.\n' | q)"
     stopw
@@ -112,6 +112,22 @@ TVS.pending = (function () {
     t.status = JSON.stringify(st);
     return t;
 }());
+// Blocked, with firmware LG downloaded earlier and its flag files
+TVS.leftovers = (function () {
+    var t = JSON.parse(JSON.stringify(TVS.blocked)), st = JSON.parse(t.status);
+    st.downloads = [{ path: '/mnt/lg/appstore/swupdatefile.epk', bytes: 1288490188, usb: false }];
+    st.flagFiles = ['.forceUpdateFlagFile', '.nsuServerTypeNetwork'];
+    st.lgFlags = ['force']; st.serverSwitch = 'Network';
+    t.status = JSON.stringify(st);
+    return t;
+}());
+// Paused for a planned update
+TVS.paused = (function () {
+    var t = JSON.parse(JSON.stringify(TVS.blocked)), st = JSON.parse(t.status);
+    st.paused = st.now + 3 * 3600; st.check = 'true'; st.auto = 'on'; st.level = 'none';
+    t.status = JSON.stringify(st);
+    return t;
+}());
 var m = /[?&]tv=(\w+)/.exec(window.location.search);
 var tv = TVS[(m && m[1]) || 'blocked'] || TVS.blocked;
 window.FB_DEMO = function (args, cb) {
@@ -122,6 +138,8 @@ window.FB_DEMO = function (args, cb) {
         else if (a === 'report') { cb(true, tv.report, ''); }
         else if (a === 'on' || a === 'off') { cb(true, tv[a] || '', ''); }
         else if (a.indexOf('update-check') === 0) { cb(true, '{"current":"0.1.1","latest":"0.1.1","newer":false,"ipkUrl":"","sha256":"","notes":"","published":""}', ''); }
+        else if (a === 'test') { cb(true, tv.test || TVS.blocked.test, ''); }
+        else if (a === 'lang') { cb(true, '', ''); }
         else if (a === 'backups') { cb(true, '[{"name":"20261119-181302","time":1795129982,"reason":"on","version":"0.1.0","check":"true","auto":"on","block":false},{"name":"20261118-090511","time":1795019111,"reason":"manual","version":"0.1.0","check":"false","auto":"off","block":true}]', ''); }
         else { cb(false, '', 'unknown'); }
     }, 60);
