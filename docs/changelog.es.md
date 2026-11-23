@@ -2,6 +2,16 @@
 
 Los cambios de WEBOS-FW-BLOCK, en español.  Los títulos de sección quedan en inglés para que coincidan con el [CHANGELOG.md](../CHANGELOG.md) original, que tiene todas las versiones.
 
+## [1.2.1] - 2026-11-23
+
+### Fixed
+
+- **La asistencia remota de LG (y a veces la dirección de respaldo) podía aparecer "no bloqueada" un momento al abrir la app.**  Las reglas del cortafuegos se comprobaban sin esperar el bloqueo de iptables, así que una comprobación hecha mientras otra cosa usaba iptables (la vigilancia en segundo plano contando paquetes, u otra petición de la propia app) fallaba enseguida y tomaba como ausente una regla que sí estaba.  Ahora FW Block espera hasta 5 segundos ese bloqueo.  Además nunca toma como ausente una regla que no pudo leer, así que la comprobación en segundo plano no "vuelve a poner" lo que nunca faltó.
+
+### Changed
+
+- **"comprobando…" en vez de suponer.**  Si las reglas del cortafuegos siguen sin poder leerse, la dirección de respaldo y la asistencia remota muestran "comprobando…" en ámbar, y la app vuelve a preguntar unos segundos después.
+
 ## [1.2.0] - 2026-11-23
 
 ### Added

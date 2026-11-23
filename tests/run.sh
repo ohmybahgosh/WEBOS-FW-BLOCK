@@ -1245,6 +1245,27 @@ test_watch_hosts_quick() {
     export FB_QUICK=30
 }
 
+# Something else holds the xtables lock (the background watch counting
+# packets) while the app asks for the status: the rules are waited for, not
+# read as missing
+test_fw_lock() {
+    run on
+    : > "$FB_ROOT/.ipt_locked"
+    json
+    check "Remote Support still reads blocked" is "$(field remote.blocked)" true
+    check "fallback address too" is "$(field firewallBy)" '"fw-block"'
+    check "rules readable" is "$(field fwRead)" true
+    run check
+    check "nothing put back" eval "! grep -q fixed '$(FBD)/events'"
+    # The lock never comes free: said so, not "open"
+    : > "$FB_ROOT/.ipt_stuck"
+    json
+    check "can't read the rules" is "$(field fwRead)" false
+    run check
+    check "not taken as missing" eval "! grep -q fixed '$(FBD)/events'"
+    rm -f "$FB_ROOT/.ipt_locked" "$FB_ROOT/.ipt_stuck"
+}
+
 for c in fresh on with_hbc_block off off_keeps_switch_that_was_off eth0_owns off_while_eth0_blocks_leaves_switch \
     readonly_hosts check_heals found_update_removed on_removes_found_update hits_counted server_switch_noted \
     luna_down no_iptables redirect_is_not_a_block eth0_leftover_rule others events_json boot boot_when_off boot_eth0 \
@@ -1257,7 +1278,7 @@ for c in fresh on with_hbc_block off off_keeps_switch_that_was_off eth0_owns off
     backups update update_not_uninstall \
     hbc_keeps_check hbc_old_doesnt_keep_check restore_from_backup_respects_hbc eth0_first_original_kept \
     failed_restore_keeps_original uninstall_waits_for_storage uninstall_retries others_lines_untouched backup_records_others restart \
-    glasshouse_hosts glasshouse_uninstall watch_hosts_quick no_glasshouse_no_header block_test clean_downloads flags_clear pause alerts; do
+    glasshouse_hosts glasshouse_uninstall watch_hosts_quick fw_lock no_glasshouse_no_header block_test clean_downloads flags_clear pause alerts; do
     t "$c" "test_$c"
 done
 

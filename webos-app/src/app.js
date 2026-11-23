@@ -154,6 +154,7 @@
     // "off · LG-USB-2-ETH0"
     function by(v, who) { return who ? v + '  ·  ' + who : v; }
 
+    var recheck = null;
     function render(s) {
         state = s;
         var h = headline(s);
@@ -170,10 +171,17 @@
             row(T('Automatic update'), s.auto === 'off' ? by(T('off'), whoName(s.autoBy)) : T('on'), s.auto === 'off' ? 'ok' : 'bad');
         }
         row(T('Update servers'), by(T('{n} of {total} blocked', { n: servers(s), total: s.hostsTotal }), hostsWho(s)), servers(s) === s.hostsTotal ? 'ok' : 'bad');
+        // The firewall's rules couldn't be read just now (something else was
+        // using iptables): "checking", and asked again in a few seconds,
+        // never "open" on a guess
+        var fwWait = s.firewall && s.fwRead === false;
+        if (fwWait && !recheck) { recheck = setTimeout(function () { recheck = null; if (!busy && !overlayMode) { refresh(); } }, 3000); }
         if (s.firewall) {
-            row(T('Fallback address'), s.firewallBy ? by(T('blocked'), whoName(s.firewallBy)) : T('open'), s.firewallBy ? 'ok' : 'bad');
+            if (fwWait && !s.firewallBy) { row(T('Fallback address'), T('checking…'), 'warn'); }
+            else { row(T('Fallback address'), s.firewallBy ? by(T('blocked'), whoName(s.firewallBy)) : T('open'), s.firewallBy ? 'ok' : 'bad'); }
         }
-        if (s.remote.blocked) { row(T('LG Remote Support'), by(T('blocked'), whoName(s.remote.by)), 'ok'); }
+        if (fwWait && !s.remote.blocked && !(s.remote.hostsMissing || []).length) { row(T('LG Remote Support'), T('checking…'), 'warn'); }
+        else if (s.remote.blocked) { row(T('LG Remote Support'), by(T('blocked'), whoName(s.remote.by)), 'ok'); }
         else { row(T('LG Remote Support'), s.on && !s.remote.on && !s.remote.by ? T('not blocked (turned off)') : T('not blocked'), s.on && !s.remote.on ? 'warn' : 'bad'); }
         if (s.phone && s.phone.present) {
             if (s.phone.blocked || (s.phone.nextStart && s.phone.by === 'eth0')) { row(T('Phone apps'), by(s.phone.nextStart ? T('blocked from the next TV start') : T('blocked'), whoName(s.phone.by)), s.phone.nextStart ? 'warn' : 'ok'); }

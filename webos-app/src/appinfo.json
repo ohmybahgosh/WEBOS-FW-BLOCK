@@ -1,6 +1,6 @@
 {
     "id": "org.ohmybahgosh.fwblock",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "vendor": "OhMyBahGosh",
     "type": "web",
     "main": "index.html",

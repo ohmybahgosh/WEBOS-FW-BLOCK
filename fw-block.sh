@@ -76,7 +76,7 @@
 #
 # Paths can be moved under FB_ROOT for the tests.
 
-VERSION="1.2.0"
+VERSION="1.2.1"
 R="${FB_ROOT:-}"
 HERE=$(cd "$(dirname "$0")" && pwd)
 SELF="$HERE/fw-block.sh"
@@ -501,10 +501,24 @@ hosts_remove() {
 # ------------------------------------------------------------- firewall
 
 have_ipt() { command -v "$IPT" >/dev/null 2>&1; }
-fw_rules() { have_ipt && "$IPT" -S 2>/dev/null; }
-fw_jump() { "$IPT" -C OUTPUT -j "$CHAIN" 2>/dev/null; }
+# iptables, waiting up to 5 seconds for the xtables lock.  Without -w, a
+# check that runs while anything else uses iptables (the app's own status
+# next to the background watch counting packets) fails at once, and a rule
+# that's there reads as missing.  -w is in iptables 1.4.20 and later; an
+# older one gets the plain call.
+ipt() {
+    "$IPT" -w 5 "$@"
+    _ipr=$?
+    [ "$_ipr" = 2 ] && { "$IPT" "$@"; _ipr=$?; }
+    return "$_ipr"
+}
+fw_rules() { have_ipt && ipt -S 2>/dev/null; }
+# The rules can be read (iptables answered, lock and all): a rule that can't
+# be read is never taken as missing
+fw_readable() { ! have_ipt || ipt -S >/dev/null 2>&1; }
+fw_jump() { ipt -C OUTPUT -j "$CHAIN" 2>/dev/null; }
 # fw_has IP: our chain drops IP, and OUTPUT goes through our chain
-fw_has() { have_ipt && "$IPT" -C "$CHAIN" -d "$1" -j DROP 2>/dev/null && fw_jump; }
+fw_has() { have_ipt && ipt -C "$CHAIN" -d "$1" -j DROP 2>/dev/null && fw_jump; }
 fw_ours() { fw_has "$UPD_IP"; }
 # Who drops the update address: fw-block, eth0, other, or nothing
 fw_by() {
@@ -517,11 +531,11 @@ fw_by() {
 # fw_add IP...: drop each IP in our chain, and send OUTPUT through it
 fw_add() {
     have_ipt || return 0
-    "$IPT" -N "$CHAIN" 2>/dev/null
+    ipt -N "$CHAIN" 2>/dev/null
     for _ip in "$@"; do
-        "$IPT" -C "$CHAIN" -d "$_ip" -j DROP 2>/dev/null || "$IPT" -A "$CHAIN" -d "$_ip" -j DROP 2>/dev/null
+        ipt -C "$CHAIN" -d "$_ip" -j DROP 2>/dev/null || ipt -A "$CHAIN" -d "$_ip" -j DROP 2>/dev/null
     done
-    fw_jump || "$IPT" -I OUTPUT 1 -j "$CHAIN" 2>/dev/null
+    fw_jump || ipt -I OUTPUT 1 -j "$CHAIN" 2>/dev/null
     _bad=''
     for _ip in "$@"; do fw_has "$_ip" || _bad="$_bad $_ip"; done
     if [ -n "$_bad" ]; then say "Could not block${_bad}."; return 1; fi
@@ -530,21 +544,21 @@ fw_add() {
 fw_del() {
     have_ipt || return 0
     for _ip in "$@"; do
-        while "$IPT" -C "$CHAIN" -d "$_ip" -j DROP 2>/dev/null; do "$IPT" -D "$CHAIN" -d "$_ip" -j DROP 2>/dev/null || break; done
+        while ipt -C "$CHAIN" -d "$_ip" -j DROP 2>/dev/null; do ipt -D "$CHAIN" -d "$_ip" -j DROP 2>/dev/null || break; done
     done
 }
 fw_remove() {
     have_ipt || return 0
     _i=0
-    while [ $_i -lt 10 ] && fw_jump; do "$IPT" -D OUTPUT -j "$CHAIN" 2>/dev/null; _i=$((_i + 1)); done
-    "$IPT" -F "$CHAIN" 2>/dev/null
-    "$IPT" -X "$CHAIN" 2>/dev/null
+    while [ $_i -lt 10 ] && fw_jump; do ipt -D OUTPUT -j "$CHAIN" 2>/dev/null; _i=$((_i + 1)); done
+    ipt -F "$CHAIN" 2>/dev/null
+    ipt -X "$CHAIN" 2>/dev/null
     return 0
 }
 # fw_hits IP...: packets our chain has stopped for them since the TV started
 fw_hits() {
     have_ipt || return 0
-    "$IPT" -L "$CHAIN" -n -v -x 2>/dev/null | awk -v ips=" $* " '
+    ipt -L "$CHAIN" -n -v -x 2>/dev/null | awk -v ips=" $* " '
         $3 == "DROP" { d = $9; sub(/\/32$/, "", d); if (index(ips, " " d " ")) n += $1 }
         END { print n + 0 }'
 }
@@ -707,9 +721,9 @@ gaps() {
     if ! eth0_auto; then [ "$(auto_get)" = on ] && _g="$_g auto"; fi
     if ! eth0_blocking; then
         [ -z "$(hosts_missing)" ] || _g="$_g hosts"
-        have_ipt && [ -z "$(fw_by)" ] && _g="$_g firewall"
+        have_ipt && fw_readable && [ -z "$(fw_by)" ] && _g="$_g firewall"
     fi
-    if remote_on && ! eth0_rs && { [ -n "$(hosts_missing "$RS_HOSTS")" ] || [ -n "$(rs_ips_open)" ]; }; then _g="$_g remote"; fi
+    if remote_on && ! eth0_rs && { [ -n "$(hosts_missing "$RS_HOSTS")" ] || { fw_readable && [ -n "$(rs_ips_open)" ]; }; }; then _g="$_g remote"; fi
     phone_on && ! eth0_phone && phone_open && _g="$_g phone"
     if ! eth0_blocking; then pending && _g="$_g download"; fi
     echo "${_g# }"
@@ -1104,6 +1118,8 @@ status_json() {
     printf '"checkBy":%s,"hbcKeepsCheck":%s,' "$(js "$(check_keeper)")" "$(jb "$(hbc_keeps_check && echo 1)")"
     printf '"check":%s,"auto":%s,"hostsBlocked":%s,"hostsMissing":%s,"hostsOurs":%s,"hostsTotal":7,' \
         "$(js "$_sw")" "$(js "$(auto_get)")" "$(ja "$_bl")" "$(ja "$_miss")" "$(jn "$(hosts_ours)")"
+    _fwr=true; fw_readable || _fwr=false
+    printf '"fwRead":%s,' "$_fwr"
     printf '"firewall":%s,"firewallBy":%s,"ip":%s,"pending":%s,"serverSwitch":%s,"lgFlags":%s,' \
         "$(jb "$(have_ipt && echo 1)")" "$(js "$_fw")" "$(js "$UPD_IP")" "$(jb "$_pend")" "$(js "$(server_switch)")" "$(ja "$(lg_flags)")"
     # Who keeps them: LG-USB-2-ETH0 or FW Block
@@ -1257,7 +1273,7 @@ backup_make() {
     [ -f "$HOSTS" ] && cp "$HOSTS" "$_bd/hosts"
     # The gateway's own file, while FW Block's copy isn't over it
     if [ -f "$SSG_IF" ] && ! phone_ours; then cp "$SSG_IF" "$_bd/update.interface"; fi
-    have_ipt && "$IPT" -S OUTPUT > "$_bd/iptables" 2>/dev/null
+    have_ipt && ipt -S OUTPUT > "$_bd/iptables" 2>/dev/null
     # The newest ones only
     _bc=$(backup_names | wc -l)
     if [ "$_bc" -gt "$KEEP_BACKUPS" ]; then

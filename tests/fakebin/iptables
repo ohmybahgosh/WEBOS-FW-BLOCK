@@ -5,6 +5,14 @@
 # -S, -N, -F, -X, -A, -I CHAIN [N], -D, -C and -L CHAIN -n -v -x.
 f="$FB_ROOT/.iptables"
 [ -f "$f" ] || printf -- '-P INPUT ACCEPT\n-P FORWARD ACCEPT\n-P OUTPUT ACCEPT\n' > "$f"
+# -w N (wait for the xtables lock) first, as fw-block.sh calls it.  With
+# $FB_ROOT/.ipt_locked, something else holds the lock: a call without -w
+# fails at once, as the real one does (exit 4), and one with -w waits it out;
+# with .ipt_stuck the wait runs out too
+w=''; [ "$1" = -w ] && { w=1; shift; case "${1:-}" in [0-9]*) shift ;; esac; }
+if [ -f "$FB_ROOT/.ipt_stuck" ] || { [ -f "$FB_ROOT/.ipt_locked" ] && [ -z "$w" ]; }; then
+    echo "Another app is currently holding the xtables lock." >&2; exit 4
+fi
 op=$1; shift
 case "$op" in
     -S) cat "$f" ;;

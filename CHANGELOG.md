@@ -2,6 +2,16 @@
 
 All notable changes to WEBOS-FW-BLOCK.  Versions follow [semantic versioning](https://semver.org/).
 
+## [1.2.1] - 2026-11-23
+
+### Fixed
+
+- **LG Remote Support (and sometimes the fallback address) could show "not blocked" for a moment when the app opened.**  The firewall's rules were checked without waiting for iptables' lock, so a check that ran while something else used iptables (the background watch counting packets, or another of the app's own requests) failed at once and read a rule that was there as missing.  FW Block now waits up to 5 seconds for the lock.  It also never takes a rule it couldn't read as missing, so the background check doesn't "put back" what was never gone.
+
+### Changed
+
+- **"checking…" instead of a guess.**  If the firewall's rules still can't be read, the fallback address and Remote Support show "checking…" in amber, and the app asks again a few seconds later.
+
 ## [1.2.0] - 2026-11-23
 
 ### Added
