@@ -1225,6 +1225,26 @@ test_glasshouse_uninstall() {
     check "only ours removed" is "$(grep -v '^$' "$FB_ROOT/etc/hosts" | grep -vxF "$GH_KEPT")" "$(cat "$T/gh")"
 }
 
+# Glasshouse's table mounted over /etc/hosts after FW Block added its lines
+# at boot (both start in the background): the 30-second loop puts them back
+# with its header, not the 10-minute check
+test_watch_hosts_quick() {
+    export FB_FIRST=3600 FB_EVERY=3600 FB_QUICK=1
+    run on
+    sleep 1
+    printf '%s\n0.0.0.0 ads.lge.com\n0.0.0.0 snu.lge.com\n0.0.0.0 su.lge.com\n0.0.0.0 su-ssl.lge.com\n0.0.0.0 su-dev.lge.com\n0.0.0.0 snu-dev.lge.com\n0.0.0.0 nsu.lge.com\n0.0.0.0 ngfts.lge.com\n' "$GH_HEAD" > "$FB_ROOT/etc/hosts"
+    _i=0; while [ $_i -lt 60 ] && ! grep -q "rone-aic.lge.com # webos-fw-block remote-support" "$FB_ROOT/etc/hosts"; do sleep 0.1; _i=$((_i + 1)); done
+    check "Remote Support lines back" in_hosts "0.0.0.0	rone-aic.lge.com # webos-fw-block remote-support"
+    check "under Glasshouse's header" is "$(grep -cxF "$GH_KEPT" "$FB_ROOT/etc/hosts")" 1
+    check "logged" ev "fixed remote"
+    # Nothing missing: the loop doesn't run the check
+    _n=$(grep -c fixed "$(FBD)/events")
+    sleep 2.5
+    check "quiet when nothing's missing" is "$(grep -c fixed "$(FBD)/events")" "$_n"
+    teardown_watch
+    export FB_QUICK=30
+}
+
 for c in fresh on with_hbc_block off off_keeps_switch_that_was_off eth0_owns off_while_eth0_blocks_leaves_switch \
     readonly_hosts check_heals found_update_removed on_removes_found_update hits_counted server_switch_noted \
     luna_down no_iptables redirect_is_not_a_block eth0_leftover_rule others events_json boot boot_when_off boot_eth0 \
@@ -1237,7 +1257,7 @@ for c in fresh on with_hbc_block off off_keeps_switch_that_was_off eth0_owns off
     backups update update_not_uninstall \
     hbc_keeps_check hbc_old_doesnt_keep_check restore_from_backup_respects_hbc eth0_first_original_kept \
     failed_restore_keeps_original uninstall_waits_for_storage uninstall_retries others_lines_untouched backup_records_others restart \
-    glasshouse_hosts glasshouse_uninstall no_glasshouse_no_header block_test clean_downloads flags_clear pause alerts; do
+    glasshouse_hosts glasshouse_uninstall watch_hosts_quick no_glasshouse_no_header block_test clean_downloads flags_clear pause alerts; do
     t "$c" "test_$c"
 done
 

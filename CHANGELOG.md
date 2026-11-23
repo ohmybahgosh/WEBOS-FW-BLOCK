@@ -2,6 +2,12 @@
 
 All notable changes to WEBOS-FW-BLOCK.  Versions follow [semantic versioning](https://semver.org/).
 
+## [1.1.1] - 2026-11-23
+
+### Fixed
+
+- **Remote Support could show as open for a minute or two after the TV turned on, with Glasshouse installed.**  FW Block and Glasshouse's ad block both start in the background.  When Glasshouse put its hosts table over /etc/hosts just after FW Block added its lines, they were hidden until Glasshouse's next rewrite, and the firewall rules were all that blocked Remote Support meanwhile.  The 30-second background loop now notices missing hosts lines and puts them back right away (under Glasshouse's header), instead of waiting for the 10-minute check.
+
 ## [1.1.0] - 2026-11-20
 
 ### Added

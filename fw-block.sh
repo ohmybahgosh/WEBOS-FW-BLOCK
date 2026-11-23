@@ -76,7 +76,7 @@
 #
 # Paths can be moved under FB_ROOT for the tests.
 
-VERSION="1.1.0"
+VERSION="1.1.1"
 R="${FB_ROOT:-}"
 HERE=$(cd "$(dirname "$0")" && pwd)
 SELF="$HERE/fw-block.sh"
@@ -426,6 +426,14 @@ hosts_missing() {
     if [ -r "$HOSTS" ]; then hosts_scan "$_hl" missing; else echo "$_hl"; fi
 }
 glasshouse() { grep -q "$GH_MARK" "$HOSTS" 2>/dev/null; }
+# A server FW Block keeps blocked has no line in /etc/hosts: cheap enough for
+# the 30-second loop (one read of the file, no service calls)
+hosts_gone() {
+    _hg=''
+    eth0_blocking || _hg="$UPD_HOSTS"
+    remote_on && ! eth0_rs && _hg="$_hg $RS_HOSTS"
+    [ -n "$_hg" ] && [ -n "$(hosts_missing "$_hg")" ]
+}
 hosts_blocked() { hosts_scan "${1:-$UPD_HOSTS}" blocked; }
 # How many update servers this added (one line each for IPv4 and IPv6)
 hosts_ours() { grep "^0\.0\.0\.0.*$TAG\$" "$HOSTS" 2>/dev/null | grep -cv "$RTAG"; }
@@ -926,7 +934,7 @@ watch() {
         watch_pid >/dev/null && return 0
         echo $$ > "$PIDF"
     fi
-    _next=$FIRST
+    _next=$FIRST _qf=0
     while setting_on && [ "$(cat "$PIDF" 2>/dev/null)" = $$ ]; do
         # Only stops once the clean-up worked; otherwise it tries again
         if app_gone; then uninstalled && return 0; fi
@@ -934,10 +942,16 @@ watch() {
             pause_due
         else
             guard_on && ! eth0_guard && guard
-            if [ "$_next" -le 0 ]; then tick; _next=$EVERY; fi
+            if [ "$_next" -le 0 ]; then tick; _next=$EVERY
+            # Our hosts lines gone: another hosts table mounted over them (an
+            # ad block starting up at the same time) or a rewrite dropped
+            # them.  Put back now rather than at the next 10-minute check,
+            # at most every 2 minutes in case they can't be
+            elif [ "$_qf" -le 0 ] && hosts_gone; then tick; _qf=120
+            fi
         fi
         sleep "$QUICK"
-        _next=$((_next - QUICK))
+        _next=$((_next - QUICK)); _qf=$((_qf - QUICK))
     done
     [ "$(cat "$PIDF" 2>/dev/null)" = $$ ] && rm -f "$PIDF"
 }

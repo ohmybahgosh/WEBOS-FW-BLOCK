@@ -2,6 +2,12 @@
 
 Los cambios de WEBOS-FW-BLOCK, en español.  Los títulos de sección quedan en inglés para que coincidan con el [CHANGELOG.md](../CHANGELOG.md) original, que tiene todas las versiones.
 
+## [1.1.1] - 2026-11-23
+
+### Fixed
+
+- **La asistencia remota podía aparecer abierta uno o dos minutos después de encender el televisor, con Glasshouse instalado.**  FW Block y el bloqueador de anuncios de Glasshouse arrancan los dos en segundo plano.  Si Glasshouse ponía su tabla sobre /etc/hosts justo después de que FW Block añadiera sus líneas, estas quedaban ocultas hasta la siguiente reescritura de Glasshouse, y mientras tanto solo las reglas del cortafuegos bloqueaban la asistencia remota.  Ahora la comprobación de cada 30 segundos detecta las líneas que faltan y las vuelve a poner enseguida (bajo el encabezado de Glasshouse), sin esperar a la comprobación de cada 10 minutos.
+
 ## [1.1.0] - 2026-11-20
 
 ### Added
