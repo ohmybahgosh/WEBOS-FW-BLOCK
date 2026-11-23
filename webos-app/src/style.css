@@ -246,3 +246,9 @@ footer { bottom: 44px; left: 100px; right: 100px; font-size: 26px; }
 .testres .bad { color: #ff5f6d; }
 .testres .warn { color: #febc2e; }
 .testres .dim { color: #8a7a7e; }
+
+/* An app update waiting: its own row, and a dot on the tab it's in */
+.btn-update { box-shadow: inset 0 0 0 2px rgba(254, 188, 46, .45); }
+.btn-update #upd-title { color: #febc2e; }
+.tab { position: relative; }
+.tab.news:after { content: ""; position: absolute; top: 7px; right: 7px; width: 14px; height: 14px; border-radius: 50%; background: #febc2e; box-shadow: 0 0 10px rgba(254, 188, 46, .7); }

@@ -2,6 +2,12 @@
 
 All notable changes to WEBOS-FW-BLOCK.  Versions follow [semantic versioning](https://semver.org/).
 
+## [1.2.0] - 2026-11-23
+
+### Added
+
+- **A newer release is easy to spot.**  Like the Entware installer: when one is out, an "Update to v…" row appears at the top of the More tab, the More tab gets a dot, and the first time it's found the app opens on it, unless you've already started using the remote.
+
 ## [1.1.1] - 2026-11-23
 
 ### Fixed

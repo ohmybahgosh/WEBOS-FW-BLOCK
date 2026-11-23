@@ -26,6 +26,7 @@ SHOTS = [
     ('tv-cleanup', 'leftovers', ['ArrowRight', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter']),
     ('tv-pause', 'blocked', ['ArrowRight', 'ArrowRight', 'ArrowDown', 'Enter', 'ArrowDown', 'Enter']),
     ('tv-paused', 'paused', []),
+    ('tv-update', 'blocked&upd=1', []),
 ]
 with sync_playwright() as p:
     b = p.chromium.launch()

@@ -2,6 +2,12 @@
 
 Los cambios de WEBOS-FW-BLOCK, en español.  Los títulos de sección quedan en inglés para que coincidan con el [CHANGELOG.md](../CHANGELOG.md) original, que tiene todas las versiones.
 
+## [1.2.0] - 2026-11-23
+
+### Added
+
+- **Una versión nueva se ve enseguida.**  Como en el instalador de Entware: cuando sale una, aparece una fila "Actualizar a la v…" arriba en la pestaña Más, la pestaña Más lleva un punto y, la primera vez que se encuentra, la app se abre en ella, salvo que ya hayas empezado a usar el mando.
+
 ## [1.1.1] - 2026-11-23
 
 ### Fixed

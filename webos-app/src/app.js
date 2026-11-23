@@ -503,7 +503,25 @@
             if (cb) { cb(); }
         });
     }
+    // Like the Entware installer: a newer release gets its own row at the
+    // top of the More tab, the tab gets a dot, and the first time it's found
+    // the app opens on it, unless the remote has been used since
+    var navigated = false, updateShown = false;
+    function updateRow() {
+        var on = !!(upd && upd.newer && !upd.error);
+        $('upd-row').style.display = on ? '' : 'none';
+        $('updates-row').style.display = on ? 'none' : '';
+        if (on) {
+            $('upd-title').textContent = T('Update to v{v}', { v: upd.latest });
+            $('upd-sub').textContent = T('you have v{v}: a signed release, and the block stays on', { v: (state && state.version) || upd.current || '' });
+            if (!navigated && !updateShown && !overlayMode && !busy) { tab = 'more'; current = 0; onTabs = false; }
+            updateShown = true;
+        }
+        fitRows();
+        if (!overlayMode) { focusCurrent(); }
+    }
     function updateHint() {
+        updateRow();
         var v = (state && state.version) || (upd && upd.current) || '';
         if (!upd) { hint('update', T('v{v}, checking for a newer one…', { v: v })); return; }
         if (upd.error) { hint('update', T('v{v}.  Couldn\'t check for a newer one: {e}', { v: v, e: updErr(upd.error) })); return; }
@@ -906,7 +924,10 @@
     }
     function fitRows() {
         Array.prototype.slice.call(document.querySelectorAll('.tab')).forEach(function (el) {
-            el.className = 'tab' + (el.getAttribute('data-tab') === tab ? ' on' : '');
+            var t = el.getAttribute('data-tab');
+            // A dot on a tab, not open, with an app update waiting in it
+            var news = t !== tab && tabRows(t).some(function (b) { return / btn-update/.test(b.className); });
+            el.className = 'tab' + (t === tab ? ' on' : '') + (news ? ' news' : '');
         });
         Array.prototype.slice.call(document.querySelectorAll('.btn')).forEach(function (b) {
             b.className = b.className.replace(/ ?off-tab/g, '') + (b.getAttribute('data-tab') === tab ? '' : ' off-tab');
@@ -983,6 +1004,7 @@
 
     document.addEventListener('keydown', function (e) {
         var k = e.keyCode;
+        navigated = true;
         if (overlayMode) {
             e.preventDefault();
             if (overlayMode === 'busy') { return; }
@@ -1018,11 +1040,11 @@
 
     // Magic Remote pointer: hovering moves the focus, clicking acts
     Array.prototype.slice.call(document.querySelectorAll('.btn')).forEach(function (btn) {
-        btn.addEventListener('mouseover', function () { if (!overlayMode) { onTabs = false; current = buttons().indexOf(btn); focusCurrent(); } });
+        btn.addEventListener('mouseover', function () { if (!overlayMode) { navigated = true; onTabs = false; current = buttons().indexOf(btn); focusCurrent(); } });
         btn.addEventListener('click', function () { current = buttons().indexOf(btn); press(btn); });
     });
     Array.prototype.slice.call(document.querySelectorAll('.tab')).forEach(function (el) {
-        el.addEventListener('click', function () { if (!overlayMode) { onTabs = true; openTab(el.getAttribute('data-tab')); } });
+        el.addEventListener('click', function () { if (!overlayMode) { navigated = true; onTabs = true; openTab(el.getAttribute('data-tab')); } });
     });
     $('overlay').addEventListener('click', function () {
         if (overlayMode === 'confirm' && onConfirm) { var fn = onConfirm; onConfirm = null; fn(); }

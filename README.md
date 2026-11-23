@@ -170,7 +170,9 @@ Before FW Block turns the block on, restores a backup or installs an update, it 
 
 ### Updates
 
-Each time it opens, the app asks GitHub for a newer release, and **Updates** in the More tab says whether there is one.  Choose it to see what's new, then OK: the Homebrew Channel downloads and installs it, and the app opens again by itself to show what changed.  The block stays on the whole time.
+Each time it opens, the app asks GitHub for a newer release, and **Updates** in the More tab says whether there is one.  When there is, an **Update to v…** row appears at the top of the More tab, the tab gets a dot, and the first time it's found the app opens on it (unless you've already started using the remote).
+
+<p><img src="assets/screenshots/tv-update.png" width="49%" alt="A newer release: Update to v1.3.0 at the top of the More tab, focused when the app opens"></p>  Choose it to see what's new, then OK: the Homebrew Channel downloads and installs it, and the app opens again by itself to show what changed.  The block stays on the whole time.
 
 Only a release signed with the project's release key (or its backup key, in case the main one is ever lost) is accepted, only from this project's own release address, and the Homebrew Channel checks the download's SHA-256 before it installs.  That check, and **Test the block** when you choose it, are the only network requests FW Block makes, and only when the app is open.  [SECURITY.md](SECURITY.md#verifying-a-download) has the keys.
 

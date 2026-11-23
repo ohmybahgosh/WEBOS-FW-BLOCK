@@ -76,7 +76,7 @@
 #
 # Paths can be moved under FB_ROOT for the tests.
 
-VERSION="1.1.1"
+VERSION="1.2.0"
 R="${FB_ROOT:-}"
 HERE=$(cd "$(dirname "$0")" && pwd)
 SELF="$HERE/fw-block.sh"
