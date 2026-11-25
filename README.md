@@ -49,7 +49,7 @@ I, [OhMyBahGosh](https://github.com/ohmybahgosh), build FW Block with AI coding 
 
 The fixes that mattered most came from that real-TV testing, not from the AI: `luna-send` quietly eating the script's input so the status came back blank, the TV's fonts missing a symbol the app drew, LG-USB-2-ETH0's new phone block looking like a gap until the TV's next start, and the status claiming FW Block was adding blocks while it was off.  The research behind the blocks came from running LG's own updater in a sandbox and reading nine firmwares (see [How we checked](#how-we-checked)), building on LG-USB-2-ETH0's `--block-updates` and the findings in Homebrew Channel issue #96 and PR #264.  The [changelog](CHANGELOG.md) has the full story.
 
-- **Tests on every push:** 78 [tests](tests/run.sh) run the script against a fake TV (its own `/etc/hosts`, settings service, firewall, phone gateway and update folders) under busybox `sh` (the TV's shell), dash and bash, along with ShellCheck, a translation check, the release signing checks, a build of the TV app and its screens in a browser.  The CI badge above shows the latest run.
+- **Tests on every push:** 79 [tests](tests/run.sh) run the script against a fake TV (its own `/etc/hosts`, settings service, firewall, phone gateway and update folders) under busybox `sh` (the TV's shell), dash and bash, along with ShellCheck, a translation check, the release signing checks, a build of the TV app and its screens in a browser.  The CI badge above shows the latest run.
 - **Signed releases:** an update only installs if its release is signed with the project's key, which only GitHub Actions uses, from an encrypted secret ([SECURITY.md](SECURITY.md#verifying-a-download)).  The Homebrew Channel checks the download's SHA-256 too.
 - **Hard to break the TV:** no system partition is written, no system service is restarted, a backup is saved before every change, and turning it off or uninstalling undoes everything it added.
 
@@ -271,8 +271,8 @@ sh fw-block.sh report          # a short report for asking for help
 
 ## FAQ
 
-**What if the Homebrew Channel's own block starts turning the update check off too?**
-A pending Homebrew Channel change (webosbrew PR #264) does that.  FW Block already checks the installed Homebrew Channel for it, names it as what keeps the update check off, and never turns the check back on behind it.
+**Does it work with the Homebrew Channel 0.8.0's Block system updates?**
+Yes.  Since [0.8.0](https://github.com/webosbrew/webos-homebrew-channel/releases/tag/v0.8.0), the Homebrew Channel's switch also turns webOS's update check off (at every start), as FW Block does.  FW Block recognizes that, names the Homebrew Channel as what keeps the check off, and never turns the check back on behind it.  Switching the Homebrew Channel's block off turns the check back on: while FW Block is on, it notices the switch within 30 seconds and turns the check off again.  Both can be on together.
 
 **Does turning FW Block off turn off LG-USB-2-ETH0's block, or the Homebrew Channel's?**
 No.  FW Block only removes what it added itself.  Their settings, `/etc/hosts` lines and firewall rules stay exactly as they were.

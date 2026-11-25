@@ -2,6 +2,12 @@
 
 Los cambios de WEBOS-FW-BLOCK, en español.  Los títulos de sección quedan en inglés para que coincidan con el [CHANGELOG.md](../CHANGELOG.md) original, que tiene todas las versiones.
 
+## [1.2.2] - 2026-11-24
+
+### Fixed
+
+- **Funciona con el Homebrew Channel 0.8.0.**  Su Block system updates ahora también ajusta la búsqueda de actualizaciones de webOS, y al desactivarlo la vuelve a activar.  Con FW Block activado, su comprobación de cada 30 segundos ahora nota el cambio del interruptor del Homebrew Channel y vuelve a desactivar la búsqueda en segundos, en vez de en la siguiente comprobación de cada 10 minutos.  Todo lo demás ya era compatible: FW Block reconoce que el bloqueo de 0.8.0 mantiene la búsqueda desactivada, y las llamadas al Homebrew Channel que usa (ejecutar, instalar, reiniciar) no cambian.
+
 ## [1.2.1] - 2026-11-23
 
 ### Fixed

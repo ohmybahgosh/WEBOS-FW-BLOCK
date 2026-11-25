@@ -2,6 +2,12 @@
 
 All notable changes to WEBOS-FW-BLOCK.  Versions follow [semantic versioning](https://semver.org/).
 
+## [1.2.2] - 2026-11-24
+
+### Fixed
+
+- **Works with the Homebrew Channel 0.8.0.**  Its Block system updates now sets webOS's update check too, and switching it off turns the check back on.  While FW Block is on, its 30-second loop now notices the Homebrew Channel's switch change and turns the check off again within seconds, instead of at the next 10-minute check.  Everything else was already compatible: FW Block recognizes 0.8.0's block as keeping the check off, and the Homebrew Channel calls it uses (run, install, restart) are unchanged.
+
 ## [1.2.1] - 2026-11-23
 
 ### Fixed

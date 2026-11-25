@@ -41,7 +41,8 @@ HBC_SVCD=/media/developer/apps/usr/palm/services/org.webosbrew.hbchannel.service
 # The Homebrew Channel with webosbrew PR #264: its block turns the update check off
 hbc_new_on() {
     : > "$FB_ROOT/var/luna/preferences/webosbrew_block_updates"
-    printf '#!/bin/sh\nluna-send -n 1 luna://com.webos.settingsservice/setSystemSettings \x27{"category":"support","settings":{"softwareUpdateEnable":"false"}}\x27\n' > "$FB_ROOT$HBC_SVCD/startup.sh"
+    # As in the Homebrew Channel 0.8.0's startup.sh (PR #264)
+    printf '#!/bin/bash\nif [[ -e /var/luna/preferences/webosbrew_block_updates ]]; then\n    luna-send -m org.webosbrew.hbchannel.service -n 1 \\\n        luna://com.webos.settingsservice/setSystemSettings \\\n        \x27{"category":"support","settings":{"softwareUpdateEnable":false}}\x27\nfi\n' > "$FB_ROOT$HBC_SVCD/startup.sh"
 }
 FBD() { echo "$FB_ROOT/var/lib/webosbrew/webos-fw-block"; }
 teardown() {
@@ -1266,6 +1267,26 @@ test_fw_lock() {
     rm -f "$FB_ROOT/.ipt_locked" "$FB_ROOT/.ipt_stuck"
 }
 
+# Homebrew Channel 0.8.0: switching its Block system updates off also turns
+# webOS's update check back on.  The watch notices the switch and looks
+# again within seconds, not at the next 10-minute check
+test_hbc_toggle_off() {
+    hbc_new_on
+    export FB_FIRST=3600 FB_EVERY=3600 FB_QUICK=1
+    run on
+    sleep 1.5
+    # The switch goes off: its flag removed, and the check set back on
+    rm -f "$FB_ROOT/var/luna/preferences/webosbrew_block_updates"
+    echo true > "$FB_ROOT/.switch"
+    _i=0; while [ $_i -lt 60 ] && [ "$(switch)" != false ]; do sleep 0.1; _i=$((_i + 1)); done
+    check "update check off again" is "$(switch)" false
+    check "logged" ev "fixed check"
+    json
+    check "kept by FW Block now" is "$(field checkBy)" '"fw-block"'
+    teardown_watch
+    export FB_QUICK=30
+}
+
 for c in fresh on with_hbc_block off off_keeps_switch_that_was_off eth0_owns off_while_eth0_blocks_leaves_switch \
     readonly_hosts check_heals found_update_removed on_removes_found_update hits_counted server_switch_noted \
     luna_down no_iptables redirect_is_not_a_block eth0_leftover_rule others events_json boot boot_when_off boot_eth0 \
@@ -1278,7 +1299,7 @@ for c in fresh on with_hbc_block off off_keeps_switch_that_was_off eth0_owns off
     backups update update_not_uninstall \
     hbc_keeps_check hbc_old_doesnt_keep_check restore_from_backup_respects_hbc eth0_first_original_kept \
     failed_restore_keeps_original uninstall_waits_for_storage uninstall_retries others_lines_untouched backup_records_others restart \
-    glasshouse_hosts glasshouse_uninstall watch_hosts_quick fw_lock no_glasshouse_no_header block_test clean_downloads flags_clear pause alerts; do
+    glasshouse_hosts glasshouse_uninstall watch_hosts_quick fw_lock hbc_toggle_off no_glasshouse_no_header block_test clean_downloads flags_clear pause alerts; do
     t "$c" "test_$c"
 done
 

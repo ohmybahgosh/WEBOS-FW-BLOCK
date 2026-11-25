@@ -76,7 +76,7 @@
 #
 # Paths can be moved under FB_ROOT for the tests.
 
-VERSION="1.2.1"
+VERSION="1.2.2"
 R="${FB_ROOT:-}"
 HERE=$(cd "$(dirname "$0")" && pwd)
 SELF="$HERE/fw-block.sh"
@@ -948,7 +948,7 @@ watch() {
         watch_pid >/dev/null && return 0
         echo $$ > "$PIDF"
     fi
-    _next=$FIRST _qf=0
+    _next=$FIRST _qf=0 _hb=$(hbc_blocking && echo 1)
     while setting_on && [ "$(cat "$PIDF" 2>/dev/null)" = $$ ]; do
         # Only stops once the clean-up worked; otherwise it tries again
         if app_gone; then uninstalled && return 0; fi
@@ -962,7 +962,12 @@ watch() {
             # them.  Put back now rather than at the next 10-minute check,
             # at most every 2 minutes in case they can't be
             elif [ "$_qf" -le 0 ] && hosts_gone; then tick; _qf=120
+            # The Homebrew Channel's Block system updates switched: since
+            # 0.8.0 that also sets webOS's update check (switching it off
+            # turns the check back on), so look again now
+            elif [ "$(hbc_blocking && echo 1)" != "$_hb" ]; then tick
             fi
+            _hb=$(hbc_blocking && echo 1)
         fi
         sleep "$QUICK"
         _next=$((_next - QUICK)); _qf=$((_qf - QUICK))
