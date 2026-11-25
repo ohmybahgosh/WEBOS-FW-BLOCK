@@ -2,6 +2,16 @@
 
 Los cambios de WEBOS-FW-BLOCK, en español.  Los títulos de sección quedan en inglés para que coincidan con el [CHANGELOG.md](../CHANGELOG.md) original, que tiene todas las versiones.
 
+## [1.3.0] - 2026-11-25
+
+### Added
+
+- **Avisa cuando el actualizador de LG pasó al encender.**  El actualizador de LG busca firmware en el primer medio minuto tras encender la TV, diga lo que digan sus ajustes.  Si el inicio del Homebrew Channel (que ejecuta FW Block) llega después, esa búsqueda puede llegar a LG antes de que haya bloqueos.  Cuando la respuesta ofrece un firmware, el actualizador muestra un aviso de actualización "webOS Re:New".  No se descarga nada, porque los bloqueos ya están puestos antes de que empiece la descarga.  FW Block ahora lo detecta en el propio registro del actualizador en cada encendido.  Lo anota en Actividad, lo muestra en rojo arriba, envía un aviso en la TV y borra lo que el actualizador encontró.  No aceptes el aviso.
+
+### Fixed
+
+- **El README decía que los ajustes de actualización de webOS detienen la búsqueda desde que la TV se enciende.**  No detienen la búsqueda que el actualizador hace al encender.  Ahora lo dice, y tiene una sección nueva sobre bloquear los servidores de actualización de LG en el router, el único bloqueo que está puesto antes que la TV.
+
 ## [1.2.2] - 2026-11-24
 
 ### Fixed

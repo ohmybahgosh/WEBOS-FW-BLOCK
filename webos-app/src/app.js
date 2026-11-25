@@ -189,6 +189,11 @@
         }
         if (s.guardBy === 'eth0') { row(T('Download watch'), by(T('on'), ETH0), 'ok'); }
         else if (s.on) { row(T('Download watch'), s.guard && s.watching ? by(T('every 30 seconds'), T('FW Block')) : (s.guard ? T('not running') : T('off (turned off)')), s.guard && s.watching ? 'ok' : 'warn'); }
+        // LG's updater got its answer at start, before any block was up
+        if (s.leak) {
+            row(T('At this start'), T('LG\'s updater reached its server before the blocks ({sec} s in){ver}.  Nothing downloaded: don\'t accept its upgrade pop-up.  Block LG\'s update servers on your router too.',
+                { sec: s.leak.sec, ver: s.leak.version ? T(', offered {v}', { v: s.leak.version }) : '' }), 'bad');
+        }
         row(T('Found update'), s.pending ? T('one is waiting to install') : T('none'), s.pending ? 'bad' : 'ok');
         if (s.stats.cancelled) {
             row(T('Downloads stopped'), T('{n}, the last {ago}', { n: s.stats.cancelled, ago: ago(s.stats.lastCancel, s.now) }), 'ok');
@@ -466,6 +471,7 @@
             case 'updated': return T('Updated FW Block to v{v}', { v: e.detail });
             case 'paused': return T('Paused for a planned update ({n} minutes)', { n: e.detail });
             case 'pause-end': return e.detail === 'boot' ? T('Pause ended: the TV started') : (e.detail === 'now' ? T('Pause ended early') : T('Pause over: blocked again'));
+            case 'leak': return T('At start, LG\'s updater reached its server before the blocks ({sec} s in)', { sec: (e.detail || '').split(' ')[0] });
             case 'cleaned': return T('Deleted {n} downloaded firmware files', { n: e.detail });
             case 'leftover': return T('Found {n} downloaded firmware files', { n: e.detail });
             case 'flags-cleared': return T('Removed {n} LG flag files', { n: e.detail });

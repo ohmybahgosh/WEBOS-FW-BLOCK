@@ -1287,6 +1287,37 @@ test_hbc_toggle_off() {
     export FB_QUICK=30
 }
 
+# LG's updater reached its server at start, before the blocks were up: the
+# offer is found in its log, noted once per start, and what it saved removed
+test_leak() {
+    run on
+    json
+    check "nothing yet" is "$(field leak)" null
+    mkdir -p "$FB_ROOT/var/log" "$FB_ROOT/proc/sys/kernel/random"
+    echo boot-a > "$FB_ROOT/proc/sys/kernel/random/boot_id"
+    printf '%s\n' "[   12.401] [nsu] start auto version check" \
+        "[   28.812] [nsu] IMAGE_NAME: webOS_tv-43.21.94_C2.epk" \
+        "[   28.813] [nsu] IMAGE_URL: https://su-ssl.lge.com/GlobalSWDownloadCdn.laf" > "$FB_ROOT/var/log/update.log"
+    : > "$FB_ROOT/mnt/lg/cmn_data/swupdate/Image_Update_Info.xml"
+    : > "$FB_ROOT/.luna.log"
+    run check
+    check "logged with when and what" ev "leak 28 43.21.94"
+    check "a notice" grep -q "reached its server" "$FB_ROOT/.luna.log"
+    check "what it found removed" eval "[ ! -e '$FB_ROOT/mnt/lg/cmn_data/swupdate/Image_Update_Info.xml' ]"
+    json
+    check "in the status" is "$(field leak.sec) $(field leak.version)" '28 "43.21.94"'
+    : > "$FB_ROOT/.luna.log"
+    run check
+    check "once per start" is "$(grep -c ' leak ' "$(FBD)/events")" 1
+    check "no second notice" eval "! grep -q createToast '$FB_ROOT/.luna.log'"
+    echo boot-b > "$FB_ROOT/proc/sys/kernel/random/boot_id"
+    run check
+    check "again at the next start" is "$(grep -c ' leak ' "$(FBD)/events")" 2
+    printf '%s\n' "[   12.401] [nsu] start auto version check" "[   56.100] [nsu] Network is disconnected during version check" > "$FB_ROOT/var/log/update.log"
+    json
+    check "a blocked check isn't one" is "$(field leak)" null
+}
+
 for c in fresh on with_hbc_block off off_keeps_switch_that_was_off eth0_owns off_while_eth0_blocks_leaves_switch \
     readonly_hosts check_heals found_update_removed on_removes_found_update hits_counted server_switch_noted \
     luna_down no_iptables redirect_is_not_a_block eth0_leftover_rule others events_json boot boot_when_off boot_eth0 \
@@ -1299,7 +1330,7 @@ for c in fresh on with_hbc_block off off_keeps_switch_that_was_off eth0_owns off
     backups update update_not_uninstall \
     hbc_keeps_check hbc_old_doesnt_keep_check restore_from_backup_respects_hbc eth0_first_original_kept \
     failed_restore_keeps_original uninstall_waits_for_storage uninstall_retries others_lines_untouched backup_records_others restart \
-    glasshouse_hosts glasshouse_uninstall watch_hosts_quick fw_lock hbc_toggle_off no_glasshouse_no_header block_test clean_downloads flags_clear pause alerts; do
+    glasshouse_hosts glasshouse_uninstall watch_hosts_quick fw_lock hbc_toggle_off leak no_glasshouse_no_header block_test clean_downloads flags_clear pause alerts; do
     t "$c" "test_$c"
 done
 

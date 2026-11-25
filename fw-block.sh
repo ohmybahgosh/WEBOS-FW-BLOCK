@@ -76,7 +76,7 @@
 #
 # Paths can be moved under FB_ROOT for the tests.
 
-VERSION="1.2.2"
+VERSION="1.3.0"
 R="${FB_ROOT:-}"
 HERE=$(cd "$(dirname "$0")" && pwd)
 SELF="$HERE/fw-block.sh"
@@ -180,6 +180,10 @@ DL_FILES="$APPSTORE/swupdatefile.epk $CMN/swupdatefile.epk $APPSTORE/.update/usb
 # flags, and the switches to the Network and Test servers
 FLAG_FILES="$CMN/.forceUpdateFlagFile $CMN/debugVersionCheck $CMN/debugDownload $CMN/.UpdateDebug $CMN/update/.nsuServerTypeNetwork $CMN/update/.nsuServerTypeTest"
 PAUSE_MAX=1440
+# The updater's log for this start (/var/log is cleared at every start), and
+# what tells this start apart from the last
+UPD_LOG="$R/var/log/update.log"
+BOOT_ID="$R/proc/sys/kernel/random/boot_id"
 PROBE="$HERE/probe.js"
 
 say() { printf '%s\n' "$*"; }
@@ -281,6 +285,9 @@ msg() {
         es-pause-end) printf '%s\n' "Terminó la pausa de FW Block: las actualizaciones de firmware vuelven a estar bloqueadas." ;;
         ru-pause-end) printf '%s\n' "Пауза FW Block закончилась: обновления прошивки снова заблокированы." ;;
         *-pause-end) printf '%s\n' "FW Block's pause is over: firmware updates are blocked again." ;;
+        es-leak) printf '%s\n' "Al encender, el actualizador de LG llegó a su servidor antes de los bloqueos. No se descargó nada: no aceptes su aviso de actualización." ;;
+        ru-leak) printf '%s\n' "При включении программа обновления LG связалась с сервером раньше блокировок. Ничего не скачано: не соглашайтесь на её предложение обновиться." ;;
+        *-leak) printf '%s\n' "At start, LG's updater reached its server before the blocks were up. Nothing was downloaded: don't accept its upgrade offer." ;;
     esac
 }
 alerts_on() { [ "$(conf_get ALERTS)" != 0 ]; }
@@ -621,6 +628,33 @@ paused() {
     [ "$_pu" -gt 0 ]
 }
 
+# LG's updater got an answer from its server at this start, before any
+# block was up: it checks in the first half minute, whatever the update
+# settings say, and the Homebrew Channel's startup (which runs every
+# blocker) can come later than that.  Prints "SECONDS VERSION" when the
+# answer offered a firmware (found in the updater's own log), nothing
+# otherwise.
+leak_info() {
+    [ -f "$UPD_LOG" ] || return 0
+    _ll=$(grep -m 1 'IMAGE_URL: ' "$UPD_LOG" 2>/dev/null) || return 0
+    _ls=$(printf '%s\n' "$_ll" | sed -n 's/^[[( ]*\([0-9][0-9]*\)\.[0-9][0-9]*[])].*/\1/p')
+    _lv=$(grep -m 1 'IMAGE_NAME: ' "$UPD_LOG" 2>/dev/null | sed -n 's/.*-\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)_.*/\1/p')
+    printf '%s %s\n' "${_ls:-0}" "${_lv:-}"
+}
+# Once per start: logged, a notice on the TV, and what the updater found
+# deleted from disk
+leak_note() {
+    _li=$(leak_info)
+    [ -n "$_li" ] || return 0
+    _lb=$(cat "$BOOT_ID" 2>/dev/null || echo none)
+    [ "$(stat_get leakBoot)" = "$_lb" ] && return 0
+    stat_set leakBoot "$_lb"
+    event leak "$_li"
+    pending && pending_clear
+    alerts_on && toast "$(msg leak)"
+    return 0
+}
+
 # The updater's status (idle, check update, downloading, installing...).
 # Only asked while one of its working files says it's busy, so the updater
 # isn't woken up for nothing.
@@ -899,6 +933,7 @@ tick() {
     now > "$LAST"
     # Paused for a planned update: nothing is put back until it's over
     if paused; then pause_due; return 0; fi
+    leak_note
     # After an app update, the copy the hook falls back on gets the new script
     _ac="$APP_DIR/assets/fw-block.sh"
     if [ -f "$_ac" ] && [ -f "$DATA/fw-block.sh" ] && ! [ "$_ac" -ef "$DATA/fw-block.sh" ] && ! cmp -s "$_ac" "$DATA/fw-block.sh"; then
@@ -989,6 +1024,7 @@ boot() {
         say "$(date): blocking."
     fi
     block boot
+    leak_note
     now > "$LAST"
     watch_start
 }
@@ -1154,6 +1190,8 @@ status_json() {
         "$(jn "$(stat_get tries)")" "$(jn "$(stat_get last)")" "$(jn "$(stat_get found)")" "$(jn "$(stat_get fixed)")" "$(js "$(stat_get fixedWhat)")" \
         "$(jn "$(stat_get remote)")" "$(jn "$(stat_get cancelled)")" "$(jn "$(stat_get lastCancel)")"
     printf '"lastCheck":%s,"every":%s,"now":%s,' "$(jn "$(cat "$LAST" 2>/dev/null)")" "$(jn "$EVERY")" "$(now)"
+    _lk=$(leak_info)
+    if [ -n "$_lk" ]; then printf '"leak":{"sec":%s,"version":%s},' "$(jn "${_lk%% *}")" "$(js "${_lk#* }")"; else printf '"leak":null,'; fi
     printf '"paused":%s,"alerts":%s,"lang":%s,"downloads":%s,"flagFiles":%s,' "$(jn "$(paused && conf_get PAUSE)")" "$(jb "$(alerts_on && echo 1)")" \
         "$(js "$(conf_get LANG)")" "$(downloads_json)" "$(ja "$(flag_files | sed 's|.*/||' | tr '\n' ' ')")"
     printf '"firmware":%s,"webos":%s' "$(js "$(firmware)")" "$(js "$(webos)")"

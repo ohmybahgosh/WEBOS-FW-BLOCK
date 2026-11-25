@@ -2,6 +2,16 @@
 
 All notable changes to WEBOS-FW-BLOCK.  Versions follow [semantic versioning](https://semver.org/).
 
+## [1.3.0] - 2026-11-25
+
+### Added
+
+- **Warns when LG's updater got through at start.**  LG's updater checks for firmware in the first half minute after the TV starts, whatever its settings say.  If the Homebrew Channel's startup (which runs FW Block) comes later than that, the check can reach LG before any block is up.  When the answer offered a firmware, the updater shows a "webOS Re:New" upgrade pop-up.  Nothing downloads, because the blocks are up before the download starts.  FW Block now finds this in the updater's own log at each start.  It notes it in Activity, shows it in red at the top, sends a notice on the TV, and deletes what the updater found.  Don't accept the pop-up.
+
+### Fixed
+
+- **The README said webOS's update settings stop the check from the moment the TV starts.**  They don't stop the check the updater runs at start.  It now says so, and has a new section on blocking LG's update servers on your router, the only block that's up before the TV is.
+
 ## [1.2.2] - 2026-11-24
 
 ### Fixed

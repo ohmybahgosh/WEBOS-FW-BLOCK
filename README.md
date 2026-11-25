@@ -28,7 +28,7 @@ One firmware update can take root off your LG TV for good, along with everything
 >
 > | LG's way in | What FW Block does |
 > |---|---|
-> | The updater's own check, from the moment the TV starts | Turns webOS's hidden update check and **Automatic software update** off |
+> | The updater's own check | Turns webOS's hidden update check and **Automatic software update** off.  Its one check right after a restart still runs: [block LG on your router](#block-lg-on-your-router-too) for that |
 > | An update webOS already found | Deletes it before it can install |
 > | LG's seven update servers | Sends all of them nowhere, including the three the Homebrew Channel's switch misses |
 > | The address the updater uses with no name | Drops it with a firewall rule |
@@ -50,7 +50,7 @@ I, [OhMyBahGosh](https://github.com/ohmybahgosh), build FW Block with AI coding 
 
 The fixes that mattered most came from that real-TV testing, not from the AI: `luna-send` quietly eating the script's input so the status came back blank, the TV's fonts missing a symbol the app drew, LG-USB-2-ETH0's new phone block looking like a gap until the TV's next start, and the status claiming FW Block was adding blocks while it was off.  The research behind the blocks came from running LG's own updater in a sandbox and reading nine firmwares (see [How we checked](#how-we-checked)), building on LG-USB-2-ETH0's `--block-updates` and the findings in Homebrew Channel issue #96 and PR #264.  The [changelog](CHANGELOG.md) has the full story.
 
-- **Tests on every push:** 79 [tests](tests/run.sh) run the script against a fake TV (its own `/etc/hosts`, settings service, firewall, phone gateway and update folders) under busybox `sh` (the TV's shell), dash and bash, along with ShellCheck, a translation check, the release signing checks, a build of the TV app and its screens in a browser.  The CI badge above shows the latest run.
+- **Tests on every push:** 80 [tests](tests/run.sh) run the script against a fake TV (its own `/etc/hosts`, settings service, firewall, phone gateway and update folders) under busybox `sh` (the TV's shell), dash and bash, along with ShellCheck, a translation check, the release signing checks, a build of the TV app and its screens in a browser.  The CI badge above shows the latest run.
 - **Signed releases:** an update only installs if its release is signed with the project's key, which only GitHub Actions uses, from an encrypted secret ([SECURITY.md](SECURITY.md#verifying-a-download)).  The Homebrew Channel checks the download's SHA-256 too.
 - **Hard to break the TV:** no system partition is written, no system service is restarted, a backup is saved before every change, and turning it off or uninstalling undoes everything it added.
 
@@ -74,7 +74,7 @@ Commits list me as the author and Claude as the committer, which is why they sho
 
 - [Install](#install)
 - [Why not just the Homebrew Channel's switch?](#why-not-just-the-homebrew-channels-switch)
-- [What it blocks](#what-it-blocks)
+- [What it blocks](#what-it-blocks) and [blocking LG on your router](#block-lg-on-your-router-too)
 - [The TV app](#the-tv-app): [backups](#backups), [updates](#updates)
 - [With LG-USB-2-ETH0 and the Homebrew Channel](#with-lg-usb-2-eth0-and-the-homebrew-channel)
 - [How we checked](#how-we-checked) and [which TVs](#which-tvs)
@@ -118,7 +118,7 @@ The Homebrew Channel's **Block system updates** sends four of LG's servers nowhe
 
 The main route, the updater asking LG:
 
-1. **webOS's update checks are turned off.**  Both of them: a hidden setting (`softwareUpdateEnable`, in the `support` category of webOS's settings service) and the visible **Automatic software update** (`automaticUpdate`).  The automatic check reads both.  With them off, the updater doesn't even ask.  They're saved settings, so they hold from the moment the TV starts, before anything else is in place.
+1. **webOS's update checks are turned off.**  Both of them: a hidden setting (`softwareUpdateEnable`, in the `support` category of webOS's settings service) and the visible **Automatic software update** (`automaticUpdate`).  The automatic check reads both.  With them off, the updater stops its regular checks.  It still makes one check in the first half minute after a real restart (not after standby), whatever these settings say, and on some TVs that's before the Homebrew Channel starts FW Block.  The download can't follow, because the other blocks are up by then.  If that check found a firmware, FW Block warns you in the app and deletes what it found.  To stop that one check too, [block LG on your router](#block-lg-on-your-router-too).
 2. **Updates it already found are deleted** (`Image_Update_Info.xml` and `Package_Update_Info.xml` in `/mnt/lg/cmn_data/swupdate`), so a found update can't install and a waiting prompt goes away.
 3. **All seven update servers go nowhere** in `/etc/hosts`: `snu`, `su`, `su-ssl`, `su-dev`, `snu-dev`, `nsu` and `ngfts.lge.com`.  It only adds the ones nothing else blocks yet, so the Homebrew Channel's lines stay as they are.
 4. **The address with no name is dropped.**  LG can switch the updater to its "network" server, and then it goes straight to `156.147.69.32`, which a hosts file can't touch.  One firewall rule drops it, in a chain of its own (`FWBLOCK`), so it's easy to see and easy to remove.
@@ -130,6 +130,25 @@ The side doors, where the updater gets a download without asking:
 7. **A download that starts anyway is stopped.**  A support session or the antenna (some regions send updates over the air) can start one.  FW Block looks every 30 seconds, cancels a download, and shows a notice on screen.  An install that's already running is only reported, because stopping one could break the TV.  USB updates, which you start yourself, are left alone.
 
 Then it **keeps it closed**: every 10 minutes (and at every start) it checks all seven, puts back anything that was undone, deletes an update webOS found, and counts the times it stopped the updater or Remote Support.  It also reports LG's own flag files without changing them: a switch to another update server, a forced update, and debug overrides.
+
+## Block LG on your router too
+
+Everything FW Block does starts with the Homebrew Channel, about half a minute after a restart.  LG's updater makes one check before that, whatever its settings say.  When that check finds a firmware, you get an upgrade pop-up (on webOS 25, "Upgrade to webOS26").  Nothing downloads, because FW Block's blocks are up before the download starts, and FW Block warns you and deletes what the updater found.  Don't accept the pop-up.
+
+To stop that check too, block LG's update servers before they reach the TV.  Add these names to your router's or DNS blocker's deny list (Pi-hole, AdGuard Home, Diversion, NextDNS and so on):
+
+```
+snu.lge.com
+su.lge.com
+su-ssl.lge.com
+nsu.lge.com
+snu-dev.lge.com
+su-dev.lge.com
+```
+
+Make sure the TV really uses that DNS: on an Asus router, set the TV to **Router** in DNS Director.  A DNS blocker only blocks names, so the address with no name (`156.147.69.32`) stays FW Block's job.
+
+No router you can change?  In the TV's network settings, set DNS by hand to a filtering service with those names on its deny list.  It's a saved TV setting, so it applies from the first lookup.  Using standby instead of unplugging also helps: the check only runs after a real restart.
 
 ## The TV app
 
