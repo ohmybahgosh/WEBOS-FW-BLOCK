@@ -8,6 +8,7 @@
 [![Release](https://img.shields.io/github/v/release/ohmybahgosh/WEBOS-FW-BLOCK?color=ff2d55)](https://github.com/ohmybahgosh/WEBOS-FW-BLOCK/releases/latest)
 [![webOS](https://img.shields.io/badge/webOS-4%20to%2026-ff2d55)](#which-tvs)
 [![Homebrew Channel](https://img.shields.io/badge/Homebrew%20Channel-ohmybahgosh.dev%2Frepo-ff2d55)](#install)
+[![Works with Homebrew Channel 0.8.0](https://img.shields.io/badge/works%20with-Homebrew%20Channel%200.8.0-3ef08f)](#with-lg-usb-2-eth0-and-the-homebrew-channel)
 [![Signed releases](https://img.shields.io/badge/releases-signed-3ef08f)](SECURITY.md#verifying-a-download)
 [![POSIX sh](https://img.shields.io/badge/POSIX-sh-89e051)](fw-block.sh)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -107,7 +108,7 @@ The phone app block takes hold from the next TV start (the TV's phone connection
 
 ## Why not just the Homebrew Channel's switch?
 
-The Homebrew Channel's **Block system updates** sends four of LG's servers nowhere in `/etc/hosts`.  It's a good start, and FW Block keeps it.  But the webOS updater also knows `nsu.lge.com`, `snu-dev.lge.com` and `ngfts.lge.com`, has an address it reaches with no name to block, and still checks for updates on its own.  People still get update notices with that switch on ([webosbrew#96](https://github.com/webosbrew/webos-homebrew-channel/issues/96)).  And none of that touches LG Remote Support or a phone app pushing an update.
+The Homebrew Channel's **Block system updates** sends four of LG's servers nowhere in `/etc/hosts`, and since [0.8.0](https://github.com/webosbrew/webos-homebrew-channel/releases/tag/v0.8.0) it turns webOS's update check off too.  It's a good start, and FW Block keeps it.  But the webOS updater also knows `nsu.lge.com`, `snu-dev.lge.com` and `ngfts.lge.com`, has an address it reaches with no name to block, and still checks for updates on its own.  People still get update notices with that switch on ([webosbrew#96](https://github.com/webosbrew/webos-homebrew-channel/issues/96)).  And none of that touches LG Remote Support or a phone app pushing an update.
 
 <p><img src="assets/screenshots/tv-blocked.png" width="49%" alt="FW Block's main screen: firmware updates blocked, the update check and automatic updates off, 7 of 7 servers blocked, the fallback address, LG Remote Support and phone apps blocked, the download watch on, 3 updater tries stopped, and the Blocks tab's four switches all on"> <img src="assets/screenshots/tv-open.png" width="49%" alt="FW Block on a TV with only the Homebrew Channel's block: partly blocked, the update check on, 4 of 7 servers blocked, the fallback address, Remote Support and phone apps open"></p>
 
@@ -192,6 +193,14 @@ Only a release signed with the project's release key (or its backup key, in case
 | Phone apps | LG-USB-2-ETH0 when its **Block phone app updates** is on, otherwise FW Block |
 | Downloads that start anyway | LG-USB-2-ETH0 when its **Stop firmware downloads** is on, otherwise FW Block |
 | The Homebrew Channel's four servers | The Homebrew Channel's **Block system updates**, when it's on |
+| Update check, with the Homebrew Channel 0.8.0 | The Homebrew Channel's **Block system updates** too, when it's on (FW Block keeps it off as well) |
+
+> [!TIP]
+> **Compatible with the [Homebrew Channel 0.8.0](https://github.com/webosbrew/webos-homebrew-channel/releases/tag/v0.8.0)** (FW Block 1.2.2 and later).  Checked against 0.8.0's code and release package:
+> - FW Block recognizes 0.8.0's **Block system updates** as keeping webOS's update check off, names it in the status, and never turns the check back on behind it.
+> - Switching the Homebrew Channel's block off turns the check back on (that's how 0.8.0 works).  While FW Block is on, it turns the check off again within 30 seconds.
+> - What FW Block uses from the Homebrew Channel (running its script, installing its signed updates, restarting the TV) is unchanged in 0.8.0.
+> - Earlier versions (0.7.x) work too.
 
 - **They never fight.**  FW Block adds only what nothing else blocks, and reads the others' settings to know.  The status and **Every block, and who keeps it** name who keeps each part.
 - **Turning one off never turns the other's off.**  Turn LG-USB-2-ETH0's block off and FW Block takes over within 10 minutes.  Turn FW Block off and LG-USB-2-ETH0's block, and the Homebrew Channel's, stay exactly as they were.  The app says so before you confirm.
